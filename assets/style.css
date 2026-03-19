@@ -1,0 +1,425 @@
+/* 48HoursReady Package Automation Styles */
+
+/* === INTAKE FORM === */
+.hr48-intake-wrapper {
+    max-width: 750px;
+    margin: 0 auto;
+    padding: 20px;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+.hr48-intake-header {
+    text-align: center;
+    margin-bottom: 30px;
+}
+
+.hr48-intake-header h2 {
+    color: #091263;
+    font-size: 28px;
+    margin-bottom: 10px;
+}
+
+.hr48-intake-header p {
+    color: #555;
+    font-size: 16px;
+    line-height: 1.5;
+}
+
+/* Steps indicator */
+.hr48-steps {
+    display: flex;
+    justify-content: center;
+    gap: 40px;
+    margin-bottom: 35px;
+    padding: 0 20px;
+}
+
+.hr48-step {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    opacity: 0.4;
+    transition: opacity 0.3s;
+}
+
+.hr48-step.active {
+    opacity: 1;
+}
+
+.hr48-step.completed {
+    opacity: 0.8;
+}
+
+.hr48-step-num {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: #ddd;
+    color: #666;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 14px;
+    transition: all 0.3s;
+}
+
+.hr48-step.active .hr48-step-num {
+    background: #091263;
+    color: #fff;
+}
+
+.hr48-step.completed .hr48-step-num {
+    background: #009D45;
+    color: #fff;
+}
+
+.hr48-step-label {
+    font-size: 14px;
+    color: #666;
+    font-weight: 500;
+}
+
+.hr48-step.active .hr48-step-label {
+    color: #091263;
+    font-weight: 600;
+}
+
+/* Step content */
+.hr48-step-content {
+    display: none;
+}
+
+.hr48-step-content.active {
+    display: block;
+    animation: hr48FadeIn 0.3s ease;
+}
+
+@keyframes hr48FadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.hr48-step-content h3 {
+    color: #091263;
+    font-size: 20px;
+    margin-bottom: 20px;
+    padding-bottom: 10px;
+    border-bottom: 2px solid #f0f0f0;
+}
+
+/* Form fields */
+.hr48-field-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 16px;
+}
+
+.hr48-field {
+    margin-bottom: 16px;
+}
+
+.hr48-field label {
+    display: block;
+    font-weight: 600;
+    color: #333;
+    margin-bottom: 6px;
+    font-size: 14px;
+}
+
+.hr48-field .required {
+    color: #e74c3c;
+}
+
+.hr48-field input[type="text"],
+.hr48-field input[type="email"],
+.hr48-field input[type="tel"],
+.hr48-field input[type="url"],
+.hr48-field select,
+.hr48-field textarea {
+    width: 100%;
+    padding: 10px 14px;
+    border: 2px solid #e0e0e0;
+    border-radius: 8px;
+    font-size: 15px;
+    font-family: inherit;
+    transition: border-color 0.2s, box-shadow 0.2s;
+    background: #fafafa;
+    box-sizing: border-box;
+}
+
+.hr48-field input:focus,
+.hr48-field select:focus,
+.hr48-field textarea:focus {
+    border-color: #091263;
+    box-shadow: 0 0 0 3px rgba(9, 18, 99, 0.1);
+    outline: none;
+    background: #fff;
+}
+
+.hr48-field textarea {
+    resize: vertical;
+    min-height: 80px;
+}
+
+.hr48-field input::placeholder,
+.hr48-field textarea::placeholder {
+    color: #aaa;
+}
+
+/* Navigation buttons */
+.hr48-nav-buttons {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 25px;
+    padding-top: 20px;
+    border-top: 1px solid #f0f0f0;
+}
+
+.hr48-btn {
+    padding: 12px 28px;
+    border: none;
+    border-radius: 8px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-family: inherit;
+}
+
+.hr48-btn-next,
+.hr48-btn-submit {
+    background: #091263;
+    color: #fff;
+}
+
+.hr48-btn-next:hover,
+.hr48-btn-submit:hover {
+    background: #009D45;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 157, 69, 0.3);
+}
+
+.hr48-btn-back {
+    background: #f0f0f0;
+    color: #555;
+}
+
+.hr48-btn-back:hover {
+    background: #e0e0e0;
+}
+
+.hr48-btn-submit {
+    padding: 14px 36px;
+    font-size: 17px;
+}
+
+.hr48-btn-submit:disabled {
+    background: #999;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+}
+
+.hr48-disclaimer {
+    text-align: center;
+    font-size: 12px;
+    color: #999;
+    margin-top: 12px;
+}
+
+/* Success state */
+.hr48-success {
+    text-align: center;
+    padding: 40px 20px;
+}
+
+.hr48-success-icon {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    background: #009D45;
+    color: #fff;
+    font-size: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 20px;
+}
+
+.hr48-success h2 {
+    color: #091263;
+    margin-bottom: 10px;
+}
+
+.hr48-loading-bar {
+    width: 300px;
+    height: 6px;
+    background: #eee;
+    border-radius: 3px;
+    margin: 20px auto;
+    overflow: hidden;
+}
+
+.hr48-loading-progress {
+    width: 0%;
+    height: 100%;
+    background: linear-gradient(90deg, #091263, #009D45);
+    border-radius: 3px;
+    animation: hr48Progress 8s ease-in-out forwards;
+}
+
+@keyframes hr48Progress {
+    0% { width: 0%; }
+    20% { width: 30%; }
+    50% { width: 60%; }
+    80% { width: 85%; }
+    100% { width: 95%; }
+}
+
+/* === RESULTS PAGE === */
+.hr48-results-wrapper {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 30px 20px;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+.hr48-results-empty,
+.hr48-results-pending {
+    text-align: center;
+    padding: 60px 20px;
+}
+
+.hr48-pending-icon {
+    font-size: 60px;
+    margin-bottom: 20px;
+}
+
+.hr48-results-header {
+    text-align: center;
+    margin-bottom: 40px;
+}
+
+.hr48-results-header h2 {
+    color: #091263;
+    font-size: 28px;
+    margin: 15px 0 5px;
+}
+
+.hr48-results-date {
+    color: #999;
+    font-size: 14px;
+}
+
+/* Document cards */
+.hr48-documents-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+    margin-bottom: 40px;
+}
+
+.hr48-doc-card {
+    background: #fff;
+    border: 2px solid #e8e8e8;
+    border-radius: 12px;
+    padding: 24px;
+    text-align: center;
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.hr48-doc-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+    border-color: #091263;
+}
+
+.hr48-doc-icon {
+    font-size: 48px;
+    margin-bottom: 12px;
+}
+
+.hr48-doc-card h3 {
+    color: #091263;
+    margin-bottom: 8px;
+    font-size: 20px;
+}
+
+.hr48-doc-card p {
+    color: #666;
+    font-size: 14px;
+    line-height: 1.5;
+}
+
+.hr48-doc-preview {
+    background: #f8f8f8;
+    border-radius: 8px;
+    padding: 12px;
+    margin: 12px 0;
+    font-size: 13px;
+    color: #555;
+    line-height: 1.5;
+    text-align: left;
+    max-height: 80px;
+    overflow: hidden;
+}
+
+.hr48-doc-actions {
+    margin-top: 16px;
+}
+
+.hr48-btn-download {
+    display: inline-block;
+    background: #091263;
+    color: #fff !important;
+    padding: 10px 24px;
+    border-radius: 8px;
+    text-decoration: none !important;
+    font-weight: 600;
+    font-size: 14px;
+    transition: background 0.2s;
+}
+
+.hr48-btn-download:hover {
+    background: #009D45;
+    color: #fff !important;
+}
+
+.hr48-results-footer {
+    text-align: center;
+    padding-top: 20px;
+    border-top: 1px solid #eee;
+}
+
+.hr48-results-footer a {
+    color: #091263;
+    font-weight: 600;
+}
+
+.hr48-brand {
+    color: #999;
+    font-size: 13px;
+    margin-top: 8px;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .hr48-field-row {
+        grid-template-columns: 1fr;
+    }
+
+    .hr48-steps {
+        gap: 15px;
+    }
+
+    .hr48-step-label {
+        display: none;
+    }
+
+    .hr48-documents-grid {
+        grid-template-columns: 1fr;
+    }
+}
