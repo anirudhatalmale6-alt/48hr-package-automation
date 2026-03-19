@@ -8,6 +8,8 @@
 
 if (!defined('ABSPATH')) exit;
 
+require_once __DIR__ . '/vendor/autoload.php';
+
 class HR48_Package_Automation {
 
     private static $instance = null;
@@ -32,6 +34,10 @@ class HR48_Package_Automation {
         add_action('wp_ajax_hr48_download_pdf', [$this, 'download_pdf']);
         add_action('wp_ajax_nopriv_hr48_download_pdf', [$this, 'download_pdf']);
         add_action('admin_menu', [$this, 'add_admin_menu']);
+        add_action('admin_enqueue_scripts', [$this, 'enqueue_admin_assets']);
+        add_action('wp_ajax_hr48_process_pdf_branding', [$this, 'ajax_process_pdf_branding']);
+        add_action('wp_ajax_hr48_generate_content', [$this, 'ajax_generate_content']);
+        add_action('wp_ajax_hr48_get_wpforms_entries', [$this, 'ajax_get_wpforms_entries']);
         add_action('rest_api_init', [$this, 'register_rest_routes']);
         add_shortcode('hr48_intake_form', [$this, 'render_intake_form']);
         add_shortcode('hr48_results', [$this, 'render_results_page']);
@@ -2060,13 +2066,40 @@ MD;
         );
 
         add_menu_page(
-            'Package Submissions',
-            'Submissions',
+            '48HoursReady',
+            '48HoursReady',
             'manage_options',
             'hr48-submissions',
             [$this, 'render_submissions_page'],
             'dashicons-clipboard',
             30
+        );
+
+        add_submenu_page(
+            'hr48-submissions',
+            'Submissions',
+            'Submissions',
+            'manage_options',
+            'hr48-submissions',
+            [$this, 'render_submissions_page']
+        );
+
+        add_submenu_page(
+            'hr48-submissions',
+            'Branding Swap',
+            'Branding Swap',
+            'manage_options',
+            'hr48-branding-swap',
+            [$this, 'render_branding_swap_page']
+        );
+
+        add_submenu_page(
+            'hr48-submissions',
+            'Content Generator',
+            'Content Generator',
+            'manage_options',
+            'hr48-content-generator',
+            [$this, 'render_content_generator_page']
         );
     }
 
@@ -2154,6 +2187,1621 @@ MD;
         return $wpdb->get_row($wpdb->prepare(
             "SELECT * FROM {$this->table_name} WHERE token = %s", $token
         ));
+    }
+
+    /* ================================================================== */
+    /*  ADMIN ASSET ENQUEUE                                                */
+    /* ================================================================== */
+    public function enqueue_admin_assets($hook) {
+        if (strpos($hook, 'hr48-branding-swap') === false && strpos($hook, 'hr48-content-generator') === false) {
+            return;
+        }
+        wp_enqueue_style('hr48-admin-custom', false);
+        wp_add_inline_style('hr48-admin-custom', $this->get_admin_custom_css());
+    }
+
+    private function get_admin_custom_css() {
+        return '
+        :root {
+            --hr48-gold: #B8975A;
+            --hr48-gold-light: #D4B87A;
+            --hr48-cream: #F0ECE3;
+            --hr48-dark: #2D2D2D;
+        }
+        .hr48-wrap { max-width: 960px; margin: 20px auto; }
+        .hr48-wrap h1 { font-size: 28px; font-weight: 700; color: var(--hr48-dark); margin-bottom: 8px; }
+        .hr48-wrap .hr48-subtitle { color: #666; font-size: 14px; margin-bottom: 24px; }
+
+        .hr48-card {
+            background: #fff;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 28px 32px;
+            margin-bottom: 24px;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+        }
+        .hr48-card h2 {
+            font-size: 18px;
+            font-weight: 700;
+            color: var(--hr48-dark);
+            margin: 0 0 4px;
+            padding: 0;
+        }
+        .hr48-card .hr48-card-desc {
+            color: #888;
+            font-size: 13px;
+            margin-bottom: 20px;
+        }
+
+        /* Upload zone */
+        .hr48-upload-zone {
+            border: 2px dashed #ccc;
+            border-radius: 8px;
+            padding: 40px 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s;
+            background: #fafafa;
+            margin-bottom: 16px;
+        }
+        .hr48-upload-zone:hover, .hr48-upload-zone.dragover {
+            border-color: var(--hr48-gold);
+            background: #fffdf7;
+        }
+        .hr48-upload-zone .upload-icon {
+            font-size: 48px;
+            color: #ccc;
+            margin-bottom: 8px;
+        }
+        .hr48-upload-zone.dragover .upload-icon { color: var(--hr48-gold); }
+        .hr48-upload-zone p { margin: 4px 0; color: #888; font-size: 14px; }
+        .hr48-upload-zone .upload-hint { font-size: 12px; color: #aaa; }
+
+        .hr48-file-info {
+            display: none;
+            background: var(--hr48-cream);
+            border-radius: 6px;
+            padding: 12px 16px;
+            margin-bottom: 16px;
+            font-size: 14px;
+            color: var(--hr48-dark);
+        }
+        .hr48-file-info .filename { font-weight: 700; }
+        .hr48-file-info .remove-file {
+            color: #c0392b;
+            cursor: pointer;
+            float: right;
+            font-weight: 600;
+        }
+
+        /* Checkbox row */
+        .hr48-checkbox-row {
+            display: flex;
+            gap: 24px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        .hr48-checkbox-row label {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 14px;
+            color: #444;
+            cursor: pointer;
+        }
+
+        /* Buttons */
+        .hr48-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            background: var(--hr48-dark);
+            color: #fff;
+            border: none;
+            padding: 12px 28px;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .hr48-btn:hover { background: var(--hr48-gold); }
+        .hr48-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .hr48-btn.hr48-btn-gold { background: var(--hr48-gold); color: #fff; }
+        .hr48-btn.hr48-btn-gold:hover { background: var(--hr48-gold-light); }
+
+        /* Progress */
+        .hr48-progress {
+            display: none;
+            margin: 16px 0;
+        }
+        .hr48-progress-bar {
+            height: 6px;
+            background: #eee;
+            border-radius: 3px;
+            overflow: hidden;
+        }
+        .hr48-progress-fill {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(90deg, var(--hr48-gold), var(--hr48-gold-light));
+            border-radius: 3px;
+            transition: width 0.5s;
+        }
+        .hr48-progress-text {
+            font-size: 13px;
+            color: #888;
+            margin-top: 6px;
+        }
+
+        /* Download result */
+        .hr48-result {
+            display: none;
+            background: #f0fdf4;
+            border: 1px solid #bbf7d0;
+            border-radius: 8px;
+            padding: 20px 24px;
+            margin-top: 16px;
+        }
+        .hr48-result .result-title {
+            font-weight: 700;
+            color: #166534;
+            font-size: 15px;
+            margin-bottom: 8px;
+        }
+        .hr48-result a {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: #166534;
+            color: #fff;
+            padding: 10px 20px;
+            border-radius: 6px;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 14px;
+            transition: background 0.2s;
+        }
+        .hr48-result a:hover { background: #14532d; }
+
+        /* Error */
+        .hr48-error {
+            display: none;
+            background: #fef2f2;
+            border: 1px solid #fecaca;
+            border-radius: 8px;
+            padding: 16px 20px;
+            margin-top: 16px;
+            color: #991b1b;
+            font-size: 14px;
+        }
+
+        /* Content Generator */
+        .hr48-form-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+            margin-bottom: 20px;
+        }
+        .hr48-form-grid .hr48-field { display: flex; flex-direction: column; }
+        .hr48-form-grid .hr48-field.full-width { grid-column: 1 / -1; }
+        .hr48-form-grid label {
+            font-size: 13px;
+            font-weight: 600;
+            color: #444;
+            margin-bottom: 4px;
+        }
+        .hr48-form-grid input,
+        .hr48-form-grid select,
+        .hr48-form-grid textarea {
+            padding: 10px 12px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 14px;
+            font-family: inherit;
+            transition: border-color 0.2s;
+        }
+        .hr48-form-grid input:focus,
+        .hr48-form-grid select:focus,
+        .hr48-form-grid textarea:focus {
+            border-color: var(--hr48-gold);
+            outline: none;
+            box-shadow: 0 0 0 2px rgba(184,151,90,0.15);
+        }
+
+        /* Output panels */
+        .hr48-output-panel {
+            display: none;
+            margin-top: 20px;
+        }
+        .hr48-output-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+        .hr48-output-header h3 {
+            margin: 0;
+            font-size: 15px;
+            color: var(--hr48-dark);
+        }
+        .hr48-copy-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: var(--hr48-dark);
+            color: #fff;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 5px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .hr48-copy-btn:hover { background: var(--hr48-gold); }
+        .hr48-copy-btn.copied { background: #166534; }
+        .hr48-output-box {
+            background: #fafafa;
+            border: 1px solid #e5e5e5;
+            border-radius: 8px;
+            padding: 20px 24px;
+            font-family: "SF Mono", "Fira Code", "Cascadia Code", monospace;
+            font-size: 13px;
+            line-height: 1.65;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            max-height: 500px;
+            overflow-y: auto;
+            color: #333;
+        }
+
+        /* Tabs */
+        .hr48-tabs {
+            display: flex;
+            gap: 0;
+            border-bottom: 2px solid #eee;
+            margin-bottom: 20px;
+        }
+        .hr48-tab {
+            padding: 10px 20px;
+            border: none;
+            background: none;
+            font-size: 14px;
+            font-weight: 600;
+            color: #888;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            margin-bottom: -2px;
+            transition: all 0.2s;
+        }
+        .hr48-tab:hover { color: var(--hr48-dark); }
+        .hr48-tab.active {
+            color: var(--hr48-gold);
+            border-bottom-color: var(--hr48-gold);
+        }
+        .hr48-tab-panel { display: none; }
+        .hr48-tab-panel.active { display: block; }
+
+        /* Source selector */
+        .hr48-source-selector {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+        .hr48-source-btn {
+            flex: 1;
+            padding: 16px 20px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            background: #fff;
+            cursor: pointer;
+            text-align: center;
+            transition: all 0.2s;
+        }
+        .hr48-source-btn:hover { border-color: var(--hr48-gold); }
+        .hr48-source-btn.active {
+            border-color: var(--hr48-gold);
+            background: #fffdf7;
+        }
+        .hr48-source-btn .source-title {
+            font-size: 14px;
+            font-weight: 700;
+            color: var(--hr48-dark);
+            margin-bottom: 4px;
+        }
+        .hr48-source-btn .source-desc { font-size: 12px; color: #888; }
+
+        /* WPForms entries table */
+        .hr48-entries-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+            margin-bottom: 16px;
+        }
+        .hr48-entries-table th {
+            background: var(--hr48-dark);
+            color: #fff;
+            padding: 10px 12px;
+            text-align: left;
+            font-weight: 600;
+        }
+        .hr48-entries-table td {
+            padding: 10px 12px;
+            border-bottom: 1px solid #eee;
+        }
+        .hr48-entries-table tr:hover td { background: #fffdf7; }
+        .hr48-entries-table .select-entry {
+            color: var(--hr48-gold);
+            font-weight: 700;
+            cursor: pointer;
+            text-decoration: none;
+        }
+        .hr48-entries-table .select-entry:hover { text-decoration: underline; }
+        ';
+    }
+
+    /* ================================================================== */
+    /*  FEATURE 1: PDF BRANDING SWAP                                       */
+    /* ================================================================== */
+
+    /**
+     * Render the Branding Swap admin page.
+     */
+    public function render_branding_swap_page() {
+        ?>
+        <div class="hr48-wrap">
+            <h1>PDF Branding Swap</h1>
+            <p class="hr48-subtitle">Upload a NotebookLM-generated PDF to remove their branding and add 48HoursReady branding.</p>
+
+            <div class="hr48-card">
+                <h2>Upload PDF</h2>
+                <p class="hr48-card-desc">Drag and drop or click to select a NotebookLM PDF. The tool will replace the NotebookLM watermark with 48HoursReady branding on every page.</p>
+
+                <form id="hr48-branding-form" enctype="multipart/form-data">
+                    <?php wp_nonce_field('hr48_branding_swap', 'hr48_branding_nonce'); ?>
+
+                    <div id="hr48-upload-zone" class="hr48-upload-zone">
+                        <div class="upload-icon">&#128196;</div>
+                        <p><strong>Drop your PDF here</strong> or click to browse</p>
+                        <p class="upload-hint">Supports PDF files up to 50 MB</p>
+                        <input type="file" id="hr48-pdf-file" name="pdf_file" accept=".pdf,application/pdf" style="display:none;" />
+                    </div>
+
+                    <div id="hr48-file-info" class="hr48-file-info">
+                        <span class="remove-file" id="hr48-remove-file">&times; Remove</span>
+                        <span class="filename" id="hr48-filename"></span>
+                        <span id="hr48-filesize" style="color:#888;margin-left:8px;"></span>
+                    </div>
+
+                    <div class="hr48-checkbox-row">
+                        <label>
+                            <input type="checkbox" name="tag_first_page" value="1" checked />
+                            Add tagline on first page
+                        </label>
+                        <label>
+                            <input type="checkbox" name="tag_last_page" value="1" checked />
+                            Add tagline on last page
+                        </label>
+                    </div>
+
+                    <button type="submit" class="hr48-btn" id="hr48-process-btn" disabled>
+                        &#9654; Process PDF
+                    </button>
+                </form>
+
+                <div id="hr48-progress" class="hr48-progress">
+                    <div class="hr48-progress-bar">
+                        <div class="hr48-progress-fill" id="hr48-progress-fill"></div>
+                    </div>
+                    <div class="hr48-progress-text" id="hr48-progress-text">Processing...</div>
+                </div>
+
+                <div id="hr48-result" class="hr48-result">
+                    <div class="result-title">PDF processed successfully!</div>
+                    <a id="hr48-download-link" href="#" target="_blank">&#11015; Download Branded PDF</a>
+                </div>
+
+                <div id="hr48-error" class="hr48-error"></div>
+            </div>
+
+            <div class="hr48-card">
+                <h2>How It Works</h2>
+                <p class="hr48-card-desc">The branding swap performs the following operations on each page:</p>
+                <ol style="margin-left:20px;color:#555;line-height:2;">
+                    <li>Imports the original PDF page using FPDI</li>
+                    <li>Draws a cream-colored rectangle (#F0ECE3) over the NotebookLM watermark area (bottom-right corner)</li>
+                    <li><strong>"Powered by <span style="color:#B8975A;">48HoursReady</span>.com"</strong> is added centered at the bottom of each page</li>
+                    <li>On first and last pages (if enabled): <strong>"Pitch Deck Ready. GPT Verified."</strong> tagline is added below the brand text</li>
+                </ol>
+            </div>
+        </div>
+
+        <script>
+        (function(){
+            var zone = document.getElementById('hr48-upload-zone');
+            var fileInput = document.getElementById('hr48-pdf-file');
+            var fileInfo = document.getElementById('hr48-file-info');
+            var fileName = document.getElementById('hr48-filename');
+            var fileSize = document.getElementById('hr48-filesize');
+            var removeBtn = document.getElementById('hr48-remove-file');
+            var processBtn = document.getElementById('hr48-process-btn');
+            var form = document.getElementById('hr48-branding-form');
+            var progress = document.getElementById('hr48-progress');
+            var progressFill = document.getElementById('hr48-progress-fill');
+            var progressText = document.getElementById('hr48-progress-text');
+            var result = document.getElementById('hr48-result');
+            var downloadLink = document.getElementById('hr48-download-link');
+            var errorDiv = document.getElementById('hr48-error');
+
+            function formatSize(bytes) {
+                if (bytes < 1024) return bytes + ' B';
+                if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+                return (bytes / 1048576).toFixed(1) + ' MB';
+            }
+
+            function showFile(file) {
+                if (!file || file.type !== 'application/pdf') {
+                    alert('Please select a PDF file.');
+                    return;
+                }
+                fileName.textContent = file.name;
+                fileSize.textContent = '(' + formatSize(file.size) + ')';
+                fileInfo.style.display = 'block';
+                zone.style.display = 'none';
+                processBtn.disabled = false;
+                result.style.display = 'none';
+                errorDiv.style.display = 'none';
+            }
+
+            zone.addEventListener('click', function() { fileInput.click(); });
+            fileInput.addEventListener('change', function() {
+                if (this.files.length) showFile(this.files[0]);
+            });
+
+            zone.addEventListener('dragover', function(e) {
+                e.preventDefault();
+                zone.classList.add('dragover');
+            });
+            zone.addEventListener('dragleave', function() {
+                zone.classList.remove('dragover');
+            });
+            zone.addEventListener('drop', function(e) {
+                e.preventDefault();
+                zone.classList.remove('dragover');
+                if (e.dataTransfer.files.length) {
+                    fileInput.files = e.dataTransfer.files;
+                    showFile(e.dataTransfer.files[0]);
+                }
+            });
+
+            removeBtn.addEventListener('click', function() {
+                fileInput.value = '';
+                fileInfo.style.display = 'none';
+                zone.style.display = 'block';
+                processBtn.disabled = true;
+            });
+
+            form.addEventListener('submit', function(e) {
+                e.preventDefault();
+                if (!fileInput.files.length) return;
+
+                var formData = new FormData(form);
+                formData.append('action', 'hr48_process_pdf_branding');
+
+                processBtn.disabled = true;
+                progress.style.display = 'block';
+                result.style.display = 'none';
+                errorDiv.style.display = 'none';
+                progressFill.style.width = '20%';
+                progressText.textContent = 'Uploading PDF...';
+
+                var xhr = new XMLHttpRequest();
+                xhr.open('POST', '<?php echo esc_js(admin_url('admin-ajax.php')); ?>', true);
+
+                xhr.upload.addEventListener('progress', function(ev) {
+                    if (ev.lengthComputable) {
+                        var pct = Math.round((ev.loaded / ev.total) * 50);
+                        progressFill.style.width = pct + '%';
+                        progressText.textContent = 'Uploading... ' + pct + '%';
+                    }
+                });
+
+                xhr.onreadystatechange = function() {
+                    if (xhr.readyState !== 4) return;
+                    progressFill.style.width = '100%';
+
+                    try {
+                        var resp = JSON.parse(xhr.responseText);
+                        if (resp.success && resp.data && resp.data.url) {
+                            progressText.textContent = 'Done!';
+                            downloadLink.href = resp.data.url;
+                            downloadLink.download = resp.data.filename || 'branded.pdf';
+                            result.style.display = 'block';
+                        } else {
+                            progressText.textContent = 'Error occurred.';
+                            errorDiv.textContent = (resp.data && resp.data.message) ? resp.data.message : 'An unknown error occurred.';
+                            errorDiv.style.display = 'block';
+                        }
+                    } catch(ex) {
+                        progressText.textContent = 'Error occurred.';
+                        errorDiv.textContent = 'Server returned an invalid response.';
+                        errorDiv.style.display = 'block';
+                    }
+                    processBtn.disabled = false;
+                };
+
+                progressFill.style.width = '10%';
+                progressText.textContent = 'Processing PDF pages...';
+                xhr.send(formData);
+            });
+        })();
+        </script>
+        <?php
+    }
+
+    /**
+     * AJAX handler: process uploaded PDF for branding swap.
+     */
+    public function ajax_process_pdf_branding() {
+        check_ajax_referer('hr48_branding_swap', 'hr48_branding_nonce');
+
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(['message' => 'Unauthorized.']);
+        }
+
+        if (empty($_FILES['pdf_file']) || $_FILES['pdf_file']['error'] !== UPLOAD_ERR_OK) {
+            wp_send_json_error(['message' => 'No PDF file uploaded or upload error.']);
+        }
+
+        $file = $_FILES['pdf_file'];
+        $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+        if ($ext !== 'pdf') {
+            wp_send_json_error(['message' => 'Only PDF files are accepted.']);
+        }
+
+        // Validate file size (50 MB max)
+        if ($file['size'] > 50 * 1024 * 1024) {
+            wp_send_json_error(['message' => 'File exceeds 50 MB limit.']);
+        }
+
+        $tag_first = !empty($_POST['tag_first_page']);
+        $tag_last = !empty($_POST['tag_last_page']);
+
+        try {
+            $output_path = $this->process_pdf_branding($file['tmp_name'], $tag_first, $tag_last);
+        } catch (\Exception $e) {
+            wp_send_json_error(['message' => 'PDF processing failed: ' . $e->getMessage()]);
+        }
+
+        if (!$output_path || !file_exists($output_path)) {
+            wp_send_json_error(['message' => 'PDF processing failed. Could not generate output file.']);
+        }
+
+        // Move to uploads directory for serving
+        $upload_dir = wp_upload_dir();
+        $branded_dir = $upload_dir['basedir'] . '/hr48-branded/';
+        if (!is_dir($branded_dir)) {
+            wp_mkdir_p($branded_dir);
+        }
+
+        $out_name = 'branded-' . sanitize_file_name(pathinfo($file['name'], PATHINFO_FILENAME)) . '-' . time() . '.pdf';
+        $dest = $branded_dir . $out_name;
+        rename($output_path, $dest);
+
+        $url = $upload_dir['baseurl'] . '/hr48-branded/' . $out_name;
+
+        wp_send_json_success([
+            'url' => $url,
+            'filename' => $out_name,
+            'message' => 'PDF branded successfully.',
+        ]);
+    }
+
+    /**
+     * Process PDF: remove NotebookLM watermark and add 48HoursReady branding.
+     *
+     * @param string $source_path Path to the uploaded PDF.
+     * @param bool $tag_first Add tagline on first page.
+     * @param bool $tag_last Add tagline on last page.
+     * @return string Path to processed PDF.
+     */
+    private function process_pdf_branding($source_path, $tag_first = true, $tag_last = true) {
+        $pdf = new \setasign\Fpdi\Fpdi();
+
+        $page_count = $pdf->setSourceFile($source_path);
+
+        for ($i = 1; $i <= $page_count; $i++) {
+            $tpl_id = $pdf->importPage($i);
+            $size = $pdf->getTemplateSize($tpl_id);
+
+            // Detect orientation from page dimensions
+            $w = $size['width'];
+            $h = $size['height'];
+            $orientation = ($w > $h) ? 'L' : 'P';
+
+            $pdf->AddPage($orientation, [$w, $h]);
+            $pdf->useTemplate($tpl_id, 0, 0, $w, $h);
+
+            // ---- Cover the NotebookLM watermark (bottom-right corner) ----
+            // NotebookLM places its icon + text in the bottom-right on cream background
+            // We draw a cream rectangle over that area
+            $cover_w = 55; // mm width of the cover rectangle
+            $cover_h = 12; // mm height
+            $cover_x = $w - $cover_w - 3; // 3mm from right edge
+            $cover_y = $h - $cover_h - 3; // 3mm from bottom edge
+
+            // Set fill color to cream (#F0ECE3 = RGB 240, 236, 227)
+            $pdf->SetFillColor(240, 236, 227);
+            $pdf->Rect($cover_x, $cover_y, $cover_w, $cover_h, 'F');
+
+            // ---- Add "Powered by 48HoursReady.com" centered at bottom ----
+            $brand_y = $h - 10; // 10mm from bottom
+
+            // "Powered by " in black
+            $pdf->SetFont('Helvetica', '', 9);
+            $powered_text = 'Powered by ';
+            $brand_text = '48HoursReady';
+            $dot_text = '.com';
+
+            $powered_w = $pdf->GetStringWidth($powered_text);
+            $brand_w = $pdf->GetStringWidth($brand_text);
+            $dot_w = $pdf->GetStringWidth($dot_text);
+            $total_w = $powered_w + $brand_w + $dot_w;
+            $start_x = ($w - $total_w) / 2;
+
+            // "Powered by " in dark (#2D2D2D)
+            $pdf->SetTextColor(45, 45, 45);
+            $pdf->SetXY($start_x, $brand_y);
+            $pdf->Cell($powered_w, 5, $powered_text, 0, 0, 'L');
+
+            // "48HoursReady" in gold (#B8975A)
+            $pdf->SetTextColor(184, 151, 90);
+            $pdf->Cell($brand_w, 5, $brand_text, 0, 0, 'L');
+
+            // ".com" in dark
+            $pdf->SetTextColor(45, 45, 45);
+            $pdf->Cell($dot_w, 5, $dot_text, 0, 0, 'L');
+
+            // ---- Add tagline on first/last page ----
+            $is_first = ($i === 1);
+            $is_last = ($i === $page_count);
+            if (($is_first && $tag_first) || ($is_last && $tag_last)) {
+                $tagline = 'Pitch Deck Ready. GPT Verified.';
+                $pdf->SetFont('Helvetica', 'I', 7);
+                $pdf->SetTextColor(184, 151, 90);
+                $tag_w = $pdf->GetStringWidth($tagline);
+                $tag_x = ($w - $tag_w) / 2;
+                $pdf->SetXY($tag_x, $brand_y + 4.5);
+                $pdf->Cell($tag_w, 4, $tagline, 0, 0, 'L');
+            }
+        }
+
+        // Save to temp file
+        $tmp = tempnam(sys_get_temp_dir(), 'hr48_branded_');
+        $pdf->Output('F', $tmp);
+
+        return $tmp;
+    }
+
+    /* ================================================================== */
+    /*  FEATURE 2: CONTENT GENERATOR                                       */
+    /* ================================================================== */
+
+    /**
+     * Render the Content Generator admin page.
+     */
+    public function render_content_generator_page() {
+        global $wpdb;
+
+        // Fetch recent plugin submissions for the selector
+        $submissions = $wpdb->get_results(
+            "SELECT id, business_name, owner_name, email, created_at FROM {$this->table_name} ORDER BY created_at DESC LIMIT 25"
+        );
+
+        // Check if WPForms is active
+        $wpforms_active = class_exists('WPForms');
+        ?>
+        <div class="hr48-wrap">
+            <h1>Content Generator</h1>
+            <p class="hr48-subtitle">Generate a ChatGPT prompt and NotebookLM source document from intake form data.</p>
+
+            <div class="hr48-card">
+                <h2>Data Source</h2>
+                <p class="hr48-card-desc">Choose where to pull the business data from.</p>
+
+                <div class="hr48-source-selector">
+                    <div class="hr48-source-btn active" data-source="manual" id="hr48-src-manual">
+                        <div class="source-title">Manual Entry</div>
+                        <div class="source-desc">Type or paste business data directly</div>
+                    </div>
+                    <div class="hr48-source-btn" data-source="plugin" id="hr48-src-plugin">
+                        <div class="source-title">Plugin Submissions</div>
+                        <div class="source-desc"><?php echo count($submissions); ?> recent entries</div>
+                    </div>
+                    <?php if ($wpforms_active): ?>
+                    <div class="hr48-source-btn" data-source="wpforms" id="hr48-src-wpforms">
+                        <div class="source-title">WPForms Entries</div>
+                        <div class="source-desc">Pull from questionnaire form</div>
+                    </div>
+                    <?php endif; ?>
+                </div>
+
+                <!-- Plugin submissions picker -->
+                <div id="hr48-plugin-entries" style="display:none;margin-bottom:20px;">
+                    <?php if (!empty($submissions)): ?>
+                    <table class="hr48-entries-table">
+                        <thead><tr><th>ID</th><th>Business</th><th>Owner</th><th>Email</th><th>Date</th><th></th></tr></thead>
+                        <tbody>
+                        <?php foreach ($submissions as $sub): ?>
+                        <tr>
+                            <td><?php echo esc_html($sub->id); ?></td>
+                            <td><?php echo esc_html($sub->business_name); ?></td>
+                            <td><?php echo esc_html($sub->owner_name); ?></td>
+                            <td><?php echo esc_html($sub->email); ?></td>
+                            <td><?php echo esc_html(date('M j, Y', strtotime($sub->created_at))); ?></td>
+                            <td><a class="select-entry" href="#" data-id="<?php echo esc_attr($sub->id); ?>">Select &rarr;</a></td>
+                        </tr>
+                        <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                    <?php else: ?>
+                    <p style="color:#888;">No plugin submissions found. Use Manual Entry or WPForms.</p>
+                    <?php endif; ?>
+                </div>
+
+                <!-- WPForms entries picker -->
+                <div id="hr48-wpforms-entries" style="display:none;margin-bottom:20px;">
+                    <p style="color:#888;">Loading WPForms entries...</p>
+                </div>
+
+                <!-- Manual entry form -->
+                <div id="hr48-manual-form">
+                    <div class="hr48-form-grid">
+                        <div class="hr48-field">
+                            <label for="cg_full_name">Full Name *</label>
+                            <input type="text" id="cg_full_name" name="full_name" placeholder="John Smith" />
+                        </div>
+                        <div class="hr48-field">
+                            <label for="cg_email">Email *</label>
+                            <input type="email" id="cg_email" name="email" placeholder="john@example.com" />
+                        </div>
+                        <div class="hr48-field">
+                            <label for="cg_phone">Phone Number</label>
+                            <input type="text" id="cg_phone" name="phone" placeholder="+1 555-0123" />
+                        </div>
+                        <div class="hr48-field">
+                            <label for="cg_business_name">Business / Project Name *</label>
+                            <input type="text" id="cg_business_name" name="business_name" placeholder="Acme Corp" />
+                        </div>
+                        <div class="hr48-field">
+                            <label for="cg_business_stage">Business Stage</label>
+                            <select id="cg_business_stage" name="business_stage">
+                                <option value="">-- Select --</option>
+                                <option value="idea">Idea / Concept</option>
+                                <option value="business">Operating Business</option>
+                                <option value="bank">Present to Bank</option>
+                            </select>
+                        </div>
+                        <div class="hr48-field">
+                            <label for="cg_purpose">Purpose</label>
+                            <select id="cg_purpose" name="purpose">
+                                <option value="">-- Select --</option>
+                                <option value="launch">Launch a New Business</option>
+                                <option value="investor">Investor Pitch</option>
+                                <option value="bank-ready">Bank-Ready Package</option>
+                            </select>
+                        </div>
+                        <div class="hr48-field">
+                            <label for="cg_package">Package</label>
+                            <select id="cg_package" name="package">
+                                <option value="$199">$199 - Starter</option>
+                                <option value="$249">$249 - Professional</option>
+                                <option value="$50">$50 - Quick Review</option>
+                            </select>
+                        </div>
+                        <div class="hr48-field">
+                            <label for="cg_language">Language</label>
+                            <select id="cg_language" name="language">
+                                <option value="English">English</option>
+                                <option value="French">French</option>
+                                <option value="Spanish">Spanish</option>
+                                <option value="Portuguese">Portuguese</option>
+                            </select>
+                        </div>
+                        <div class="hr48-field">
+                            <label for="cg_brand_color">Preferred Brand Color</label>
+                            <input type="text" id="cg_brand_color" name="brand_color" placeholder="#B8975A or Gold" />
+                        </div>
+                        <div class="hr48-field">
+                            <label for="cg_industry">Industry</label>
+                            <input type="text" id="cg_industry" name="industry" placeholder="Technology, Food Service, etc." />
+                        </div>
+                        <div class="hr48-field full-width">
+                            <label for="cg_one_sentence">One-Sentence Description *</label>
+                            <input type="text" id="cg_one_sentence" name="one_sentence" placeholder="We help small businesses access affordable marketing solutions." />
+                        </div>
+                        <div class="hr48-field full-width">
+                            <label for="cg_description">Full Business Description</label>
+                            <textarea id="cg_description" name="description" rows="3" placeholder="Detailed description of the business, products, and services..."></textarea>
+                        </div>
+                        <div class="hr48-field">
+                            <label for="cg_target_market">Target Market</label>
+                            <textarea id="cg_target_market" name="target_market" rows="2" placeholder="Small business owners ages 25-55..."></textarea>
+                        </div>
+                        <div class="hr48-field">
+                            <label for="cg_revenue_model">Revenue Model</label>
+                            <textarea id="cg_revenue_model" name="revenue_model" rows="2" placeholder="Subscription-based SaaS, freemium..."></textarea>
+                        </div>
+                        <div class="hr48-field">
+                            <label for="cg_funding_needed">Funding Needed</label>
+                            <input type="text" id="cg_funding_needed" name="funding_needed" placeholder="$50,000 - $100,000" />
+                        </div>
+                        <div class="hr48-field">
+                            <label for="cg_funding_purpose">Use of Funds</label>
+                            <textarea id="cg_funding_purpose" name="funding_purpose" rows="2" placeholder="Marketing, product dev, hiring..."></textarea>
+                        </div>
+                        <div class="hr48-field full-width">
+                            <label for="cg_competitive_advantage">Competitive Advantage</label>
+                            <textarea id="cg_competitive_advantage" name="competitive_advantage" rows="2" placeholder="What sets you apart from competitors..."></textarea>
+                        </div>
+                        <div class="hr48-field">
+                            <label for="cg_num_employees">Number of Employees</label>
+                            <input type="text" id="cg_num_employees" name="num_employees" placeholder="1-5" />
+                        </div>
+                        <div class="hr48-field">
+                            <label for="cg_location">Location</label>
+                            <input type="text" id="cg_location" name="location" placeholder="New York, NY" />
+                        </div>
+                        <div class="hr48-field full-width">
+                            <label for="cg_additional_info">Additional Information</label>
+                            <textarea id="cg_additional_info" name="additional_info" rows="3" placeholder="Any other relevant details about the business..."></textarea>
+                        </div>
+                    </div>
+
+                    <?php wp_nonce_field('hr48_content_gen', 'hr48_content_nonce'); ?>
+
+                    <button type="button" class="hr48-btn hr48-btn-gold" id="hr48-generate-btn">
+                        &#9889; Generate Content
+                    </button>
+                </div>
+            </div>
+
+            <!-- Output panels -->
+            <div id="hr48-output-panels" class="hr48-output-panel">
+                <div class="hr48-card">
+                    <div class="hr48-tabs">
+                        <button class="hr48-tab active" data-tab="chatgpt">ChatGPT Prompt</button>
+                        <button class="hr48-tab" data-tab="notebooklm">NotebookLM Source Document</button>
+                    </div>
+
+                    <div class="hr48-tab-panel active" id="hr48-panel-chatgpt">
+                        <div class="hr48-output-header">
+                            <h3>ChatGPT Prompt</h3>
+                            <button class="hr48-copy-btn" data-target="hr48-chatgpt-output">&#128203; Copy to Clipboard</button>
+                        </div>
+                        <div class="hr48-output-box" id="hr48-chatgpt-output"></div>
+                    </div>
+
+                    <div class="hr48-tab-panel" id="hr48-panel-notebooklm">
+                        <div class="hr48-output-header">
+                            <h3>NotebookLM Source Document</h3>
+                            <button class="hr48-copy-btn" data-target="hr48-notebooklm-output">&#128203; Copy to Clipboard</button>
+                        </div>
+                        <div class="hr48-output-box" id="hr48-notebooklm-output"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <script>
+        (function(){
+            /* ---- Source selector ---- */
+            var sourceBtns = document.querySelectorAll('.hr48-source-btn');
+            var manualForm = document.getElementById('hr48-manual-form');
+            var pluginEntries = document.getElementById('hr48-plugin-entries');
+            var wpformsEntries = document.getElementById('hr48-wpforms-entries');
+            var currentSource = 'manual';
+
+            sourceBtns.forEach(function(btn) {
+                btn.addEventListener('click', function() {
+                    sourceBtns.forEach(function(b) { b.classList.remove('active'); });
+                    btn.classList.add('active');
+                    currentSource = btn.dataset.source;
+
+                    manualForm.style.display = currentSource === 'manual' ? 'block' : (currentSource === 'plugin' || currentSource === 'wpforms') ? 'block' : 'none';
+                    pluginEntries.style.display = currentSource === 'plugin' ? 'block' : 'none';
+                    wpformsEntries.style.display = currentSource === 'wpforms' ? 'block' : 'none';
+
+                    if (currentSource === 'wpforms') {
+                        loadWPFormsEntries();
+                    }
+                });
+            });
+
+            /* ---- Plugin submission selector ---- */
+            document.querySelectorAll('.select-entry').forEach(function(link) {
+                link.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    var id = this.dataset.id;
+                    loadPluginSubmission(id);
+                });
+            });
+
+            function loadPluginSubmission(id) {
+                var formData = new FormData();
+                formData.append('action', 'hr48_generate_content');
+                formData.append('hr48_content_nonce', document.querySelector('[name="hr48_content_nonce"]').value);
+                formData.append('source', 'plugin');
+                formData.append('submission_id', id);
+
+                fetch('<?php echo esc_js(admin_url('admin-ajax.php')); ?>', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(function(r) { return r.json(); })
+                .then(function(resp) {
+                    if (resp.success && resp.data) {
+                        populateFormFromData(resp.data.fields || {});
+                        if (resp.data.chatgpt_prompt) {
+                            showOutput(resp.data.chatgpt_prompt, resp.data.notebooklm_doc);
+                        }
+                    }
+                });
+            }
+
+            function populateFormFromData(d) {
+                var map = {
+                    'full_name': 'cg_full_name',
+                    'email': 'cg_email',
+                    'phone': 'cg_phone',
+                    'business_name': 'cg_business_name',
+                    'business_stage': 'cg_business_stage',
+                    'industry': 'cg_industry',
+                    'one_sentence': 'cg_one_sentence',
+                    'description': 'cg_description',
+                    'target_market': 'cg_target_market',
+                    'revenue_model': 'cg_revenue_model',
+                    'funding_needed': 'cg_funding_needed',
+                    'funding_purpose': 'cg_funding_purpose',
+                    'competitive_advantage': 'cg_competitive_advantage',
+                    'num_employees': 'cg_num_employees',
+                    'location': 'cg_location',
+                    'additional_info': 'cg_additional_info',
+                    'brand_color': 'cg_brand_color'
+                };
+                for (var key in map) {
+                    var el = document.getElementById(map[key]);
+                    if (el && d[key]) {
+                        el.value = d[key];
+                    }
+                }
+            }
+
+            /* ---- WPForms entries loader ---- */
+            var wpformsLoaded = false;
+            function loadWPFormsEntries() {
+                if (wpformsLoaded) return;
+                wpformsLoaded = true;
+
+                var formData = new FormData();
+                formData.append('action', 'hr48_get_wpforms_entries');
+                formData.append('hr48_content_nonce', document.querySelector('[name="hr48_content_nonce"]').value);
+
+                fetch('<?php echo esc_js(admin_url('admin-ajax.php')); ?>', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(function(r) { return r.json(); })
+                .then(function(resp) {
+                    var container = document.getElementById('hr48-wpforms-entries');
+                    if (resp.success && resp.data && resp.data.entries && resp.data.entries.length > 0) {
+                        var html = '<table class="hr48-entries-table"><thead><tr><th>Entry</th><th>Name</th><th>Email</th><th>Business</th><th>Date</th><th></th></tr></thead><tbody>';
+                        resp.data.entries.forEach(function(entry) {
+                            html += '<tr>';
+                            html += '<td>' + entry.id + '</td>';
+                            html += '<td>' + (entry.name || '-') + '</td>';
+                            html += '<td>' + (entry.email || '-') + '</td>';
+                            html += '<td>' + (entry.business_name || '-') + '</td>';
+                            html += '<td>' + (entry.date || '-') + '</td>';
+                            html += '<td><a class="select-entry wpforms-select" href="#" data-entry=\'' + JSON.stringify(entry) + '\'>Select &rarr;</a></td>';
+                            html += '</tr>';
+                        });
+                        html += '</tbody></table>';
+                        container.innerHTML = html;
+
+                        container.querySelectorAll('.wpforms-select').forEach(function(link) {
+                            link.addEventListener('click', function(e) {
+                                e.preventDefault();
+                                var entry = JSON.parse(this.dataset.entry);
+                                populateFormFromWPForms(entry);
+                            });
+                        });
+                    } else {
+                        container.innerHTML = '<p style="color:#888;">No WPForms entries found. Make sure the intake questionnaire form has submissions.</p>';
+                    }
+                })
+                .catch(function() {
+                    document.getElementById('hr48-wpforms-entries').innerHTML = '<p style="color:#c00;">Failed to load WPForms entries.</p>';
+                });
+            }
+
+            function populateFormFromWPForms(entry) {
+                var el;
+                el = document.getElementById('cg_full_name'); if (el && entry.name) el.value = entry.name;
+                el = document.getElementById('cg_email'); if (el && entry.email) el.value = entry.email;
+                el = document.getElementById('cg_phone'); if (el && entry.phone) el.value = entry.phone;
+                el = document.getElementById('cg_business_name'); if (el && entry.business_name) el.value = entry.business_name;
+                el = document.getElementById('cg_business_stage'); if (el && entry.business_stage) el.value = entry.business_stage;
+                el = document.getElementById('cg_purpose'); if (el && entry.purpose) el.value = entry.purpose;
+                el = document.getElementById('cg_package'); if (el && entry.package_val) el.value = entry.package_val;
+                el = document.getElementById('cg_language'); if (el && entry.language) el.value = entry.language;
+                el = document.getElementById('cg_brand_color'); if (el && entry.brand_color) el.value = entry.brand_color;
+                el = document.getElementById('cg_one_sentence'); if (el && entry.one_sentence) el.value = entry.one_sentence;
+                el = document.getElementById('cg_additional_info'); if (el && entry.additional_info) el.value = entry.additional_info;
+                // Trigger generate
+                document.getElementById('hr48-generate-btn').click();
+            }
+
+            /* ---- Generate content ---- */
+            document.getElementById('hr48-generate-btn').addEventListener('click', function() {
+                var fields = collectFormFields();
+                if (!fields.business_name || !fields.full_name) {
+                    alert('Please enter at least the Full Name and Business Name.');
+                    return;
+                }
+
+                var formData = new FormData();
+                formData.append('action', 'hr48_generate_content');
+                formData.append('hr48_content_nonce', document.querySelector('[name="hr48_content_nonce"]').value);
+                formData.append('source', 'manual');
+                formData.append('fields', JSON.stringify(fields));
+
+                this.disabled = true;
+                this.textContent = 'Generating...';
+                var btn = this;
+
+                fetch('<?php echo esc_js(admin_url('admin-ajax.php')); ?>', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(function(r) { return r.json(); })
+                .then(function(resp) {
+                    btn.disabled = false;
+                    btn.innerHTML = '&#9889; Generate Content';
+                    if (resp.success && resp.data) {
+                        showOutput(resp.data.chatgpt_prompt, resp.data.notebooklm_doc);
+                    } else {
+                        alert((resp.data && resp.data.message) || 'Generation failed.');
+                    }
+                })
+                .catch(function() {
+                    btn.disabled = false;
+                    btn.innerHTML = '&#9889; Generate Content';
+                    alert('Request failed. Please try again.');
+                });
+            });
+
+            function collectFormFields() {
+                return {
+                    full_name: document.getElementById('cg_full_name').value.trim(),
+                    email: document.getElementById('cg_email').value.trim(),
+                    phone: document.getElementById('cg_phone').value.trim(),
+                    business_name: document.getElementById('cg_business_name').value.trim(),
+                    business_stage: document.getElementById('cg_business_stage').value,
+                    purpose: document.getElementById('cg_purpose').value,
+                    package_val: document.getElementById('cg_package').value,
+                    language: document.getElementById('cg_language').value,
+                    brand_color: document.getElementById('cg_brand_color').value.trim(),
+                    industry: document.getElementById('cg_industry').value.trim(),
+                    one_sentence: document.getElementById('cg_one_sentence').value.trim(),
+                    description: document.getElementById('cg_description').value.trim(),
+                    target_market: document.getElementById('cg_target_market').value.trim(),
+                    revenue_model: document.getElementById('cg_revenue_model').value.trim(),
+                    funding_needed: document.getElementById('cg_funding_needed').value.trim(),
+                    funding_purpose: document.getElementById('cg_funding_purpose').value.trim(),
+                    competitive_advantage: document.getElementById('cg_competitive_advantage').value.trim(),
+                    num_employees: document.getElementById('cg_num_employees').value.trim(),
+                    location: document.getElementById('cg_location').value.trim(),
+                    additional_info: document.getElementById('cg_additional_info').value.trim()
+                };
+            }
+
+            function showOutput(chatgpt, notebooklm) {
+                var panels = document.getElementById('hr48-output-panels');
+                panels.style.display = 'block';
+                document.getElementById('hr48-chatgpt-output').textContent = chatgpt;
+                document.getElementById('hr48-notebooklm-output').textContent = notebooklm;
+                panels.scrollIntoView({ behavior: 'smooth' });
+            }
+
+            /* ---- Tabs ---- */
+            document.querySelectorAll('.hr48-tab').forEach(function(tab) {
+                tab.addEventListener('click', function() {
+                    document.querySelectorAll('.hr48-tab').forEach(function(t) { t.classList.remove('active'); });
+                    document.querySelectorAll('.hr48-tab-panel').forEach(function(p) { p.classList.remove('active'); });
+                    tab.classList.add('active');
+                    document.getElementById('hr48-panel-' + tab.dataset.tab).classList.add('active');
+                });
+            });
+
+            /* ---- Copy to clipboard ---- */
+            document.querySelectorAll('.hr48-copy-btn').forEach(function(btn) {
+                btn.addEventListener('click', function() {
+                    var target = document.getElementById(btn.dataset.target);
+                    var text = target.textContent;
+
+                    if (navigator.clipboard && navigator.clipboard.writeText) {
+                        navigator.clipboard.writeText(text).then(function() {
+                            markCopied(btn);
+                        }).catch(function() {
+                            fallbackCopy(text, btn);
+                        });
+                    } else {
+                        fallbackCopy(text, btn);
+                    }
+                });
+            });
+
+            function fallbackCopy(text, btn) {
+                var ta = document.createElement('textarea');
+                ta.value = text;
+                ta.style.position = 'fixed';
+                ta.style.left = '-9999px';
+                document.body.appendChild(ta);
+                ta.select();
+                try {
+                    document.execCommand('copy');
+                    markCopied(btn);
+                } catch(e) {
+                    alert('Copy failed. Please select and copy manually.');
+                }
+                document.body.removeChild(ta);
+            }
+
+            function markCopied(btn) {
+                var orig = btn.innerHTML;
+                btn.innerHTML = '&#10003; Copied!';
+                btn.classList.add('copied');
+                setTimeout(function() {
+                    btn.innerHTML = orig;
+                    btn.classList.remove('copied');
+                }, 2000);
+            }
+        })();
+        </script>
+        <?php
+    }
+
+    /**
+     * AJAX handler: generate ChatGPT prompt and NotebookLM document.
+     */
+    public function ajax_generate_content() {
+        check_ajax_referer('hr48_content_gen', 'hr48_content_nonce');
+
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(['message' => 'Unauthorized.']);
+        }
+
+        $source = sanitize_text_field($_POST['source'] ?? 'manual');
+        $fields = [];
+
+        if ($source === 'plugin') {
+            // Load from plugin submissions table
+            $id = intval($_POST['submission_id'] ?? 0);
+            if (!$id) {
+                wp_send_json_error(['message' => 'No submission ID provided.']);
+            }
+            global $wpdb;
+            $row = $wpdb->get_row($wpdb->prepare(
+                "SELECT * FROM {$this->table_name} WHERE id = %d", $id
+            ));
+            if (!$row) {
+                wp_send_json_error(['message' => 'Submission not found.']);
+            }
+            $fields = [
+                'full_name' => $row->owner_name,
+                'email' => $row->email,
+                'phone' => $row->phone,
+                'business_name' => $row->business_name,
+                'business_stage' => $row->business_stage,
+                'industry' => $row->industry,
+                'one_sentence' => '',
+                'description' => $row->business_description,
+                'target_market' => $row->target_market,
+                'revenue_model' => $row->revenue_model,
+                'funding_needed' => $row->funding_needed,
+                'funding_purpose' => $row->funding_purpose,
+                'competitive_advantage' => $row->competitive_advantage,
+                'num_employees' => $row->num_employees,
+                'location' => $row->location,
+                'additional_info' => '',
+                'brand_color' => '',
+                'purpose' => '',
+                'package_val' => $row->package_type,
+                'language' => 'English',
+            ];
+        } else {
+            // Manual / direct entry
+            $raw = json_decode(stripslashes($_POST['fields'] ?? '{}'), true);
+            if (!is_array($raw)) {
+                wp_send_json_error(['message' => 'Invalid data format.']);
+            }
+            $fields = array_map('sanitize_text_field', $raw);
+            // Allow textarea fields to keep newlines
+            foreach (['description', 'target_market', 'revenue_model', 'funding_purpose', 'competitive_advantage', 'additional_info'] as $ta_field) {
+                if (isset($raw[$ta_field])) {
+                    $fields[$ta_field] = sanitize_textarea_field($raw[$ta_field]);
+                }
+            }
+        }
+
+        $chatgpt_prompt = $this->build_chatgpt_prompt($fields);
+        $notebooklm_doc = $this->build_notebooklm_doc($fields);
+
+        wp_send_json_success([
+            'fields' => $fields,
+            'chatgpt_prompt' => $chatgpt_prompt,
+            'notebooklm_doc' => $notebooklm_doc,
+        ]);
+    }
+
+    /**
+     * AJAX handler: fetch WPForms entries for the intake questionnaire.
+     */
+    public function ajax_get_wpforms_entries() {
+        check_ajax_referer('hr48_content_gen', 'hr48_content_nonce');
+
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(['message' => 'Unauthorized.']);
+        }
+
+        if (!class_exists('WPForms')) {
+            wp_send_json_error(['message' => 'WPForms is not active.']);
+        }
+
+        // Find forms - look for the main intake form
+        global $wpdb;
+        $forms_table = $wpdb->prefix . 'posts';
+        $entries_table = $wpdb->prefix . 'wpforms_entries';
+
+        // Check if the entries table exists
+        $table_exists = $wpdb->get_var("SHOW TABLES LIKE '{$entries_table}'");
+        if (!$table_exists) {
+            wp_send_json_error(['message' => 'WPForms entries table not found. Make sure WPForms Lite or Pro with entries storage is active.']);
+        }
+
+        // Get recent entries from all WPForms forms (limit 30)
+        $entries = $wpdb->get_results(
+            "SELECT entry_id, form_id, fields, date_created FROM {$entries_table} ORDER BY date_created DESC LIMIT 30"
+        );
+
+        $parsed = [];
+        foreach ($entries as $entry) {
+            $entry_fields = json_decode($entry->fields, true);
+            if (!is_array($entry_fields)) continue;
+
+            $parsed_entry = [
+                'id' => $entry->entry_id,
+                'form_id' => $entry->form_id,
+                'date' => date('M j, Y', strtotime($entry->date_created)),
+                'name' => '',
+                'email' => '',
+                'phone' => '',
+                'business_name' => '',
+                'business_stage' => '',
+                'purpose' => '',
+                'package_val' => '',
+                'language' => '',
+                'brand_color' => '',
+                'one_sentence' => '',
+                'additional_info' => '',
+            ];
+
+            // Map WPForms field IDs to our fields
+            // Field 1: Full Name, 2: Email, 11: Phone, 3: Business Name
+            // 9: Business stage, 4: Purpose, 5: Package, 6: Language
+            // 7: Brand Color, 10: One-sentence, 8: Additional
+            foreach ($entry_fields as $fid => $fdata) {
+                $val = is_array($fdata) ? ($fdata['value'] ?? '') : $fdata;
+                $id_num = intval($fid);
+                switch ($id_num) {
+                    case 1: $parsed_entry['name'] = $val; break;
+                    case 2: $parsed_entry['email'] = $val; break;
+                    case 11: $parsed_entry['phone'] = $val; break;
+                    case 3: $parsed_entry['business_name'] = $val; break;
+                    case 9: $parsed_entry['business_stage'] = $val; break;
+                    case 4: $parsed_entry['purpose'] = $val; break;
+                    case 5: $parsed_entry['package_val'] = $val; break;
+                    case 6: $parsed_entry['language'] = $val; break;
+                    case 7: $parsed_entry['brand_color'] = $val; break;
+                    case 10: $parsed_entry['one_sentence'] = $val; break;
+                    case 8: $parsed_entry['additional_info'] = $val; break;
+                }
+            }
+
+            $parsed[] = $parsed_entry;
+        }
+
+        wp_send_json_success(['entries' => $parsed]);
+    }
+
+    /**
+     * Build a ChatGPT prompt from intake data.
+     */
+    private function build_chatgpt_prompt($f) {
+        $business_name = $f['business_name'] ?? 'the business';
+        $owner = $f['full_name'] ?? 'the owner';
+        $email = $f['email'] ?? '';
+        $phone = $f['phone'] ?? '';
+        $stage = $f['business_stage'] ?? '';
+        $purpose = $f['purpose'] ?? '';
+        $industry = $f['industry'] ?? '';
+        $one_sentence = $f['one_sentence'] ?? '';
+        $description = $f['description'] ?? '';
+        $target_market = $f['target_market'] ?? '';
+        $revenue_model = $f['revenue_model'] ?? '';
+        $funding_needed = $f['funding_needed'] ?? '';
+        $funding_purpose = $f['funding_purpose'] ?? '';
+        $competitive_adv = $f['competitive_advantage'] ?? '';
+        $num_employees = $f['num_employees'] ?? '';
+        $location = $f['location'] ?? '';
+        $language = $f['language'] ?? 'English';
+        $additional = $f['additional_info'] ?? '';
+        $brand_color = $f['brand_color'] ?? '';
+        $package = $f['package_val'] ?? '';
+
+        $stage_label = $stage;
+        if ($stage === 'idea') $stage_label = 'Idea / Concept stage';
+        if ($stage === 'business') $stage_label = 'Operating business';
+        if ($stage === 'bank') $stage_label = 'Preparing to present to a bank';
+
+        $purpose_label = $purpose;
+        if ($purpose === 'launch') $purpose_label = 'launching a new business';
+        if ($purpose === 'investor') $purpose_label = 'creating an investor pitch';
+        if ($purpose === 'bank-ready') $purpose_label = 'creating a bank-ready funding package';
+
+        $prompt = "You are an expert business consultant and investment strategist. I need you to generate a comprehensive, investor-ready Executive Summary for the following business. The summary should be professional, compelling, data-driven where possible, and suitable for presenting to investors, banks, or potential partners.\n\n";
+        $prompt .= "=== BUSINESS INFORMATION ===\n\n";
+        $prompt .= "Business Name: {$business_name}\n";
+        $prompt .= "Owner / Founder: {$owner}\n";
+        if ($email) $prompt .= "Email: {$email}\n";
+        if ($phone) $prompt .= "Phone: {$phone}\n";
+        if ($industry) $prompt .= "Industry: {$industry}\n";
+        if ($location) $prompt .= "Location: {$location}\n";
+        if ($stage_label) $prompt .= "Business Stage: {$stage_label}\n";
+        if ($purpose_label) $prompt .= "Purpose: {$purpose_label}\n";
+        if ($num_employees) $prompt .= "Team Size: {$num_employees} employees\n";
+        if ($one_sentence) $prompt .= "One-Sentence Summary: {$one_sentence}\n";
+        $prompt .= "\n";
+
+        if ($description) $prompt .= "Business Description:\n{$description}\n\n";
+        if ($target_market) $prompt .= "Target Market:\n{$target_market}\n\n";
+        if ($revenue_model) $prompt .= "Revenue Model:\n{$revenue_model}\n\n";
+        if ($competitive_adv) $prompt .= "Competitive Advantage:\n{$competitive_adv}\n\n";
+        if ($funding_needed) $prompt .= "Funding Needed: {$funding_needed}\n";
+        if ($funding_purpose) $prompt .= "Use of Funds:\n{$funding_purpose}\n\n";
+        if ($additional) $prompt .= "Additional Context:\n{$additional}\n\n";
+
+        $prompt .= "=== INSTRUCTIONS ===\n\n";
+        $prompt .= "Please generate the Executive Summary with the following sections:\n\n";
+        $prompt .= "1. **Company Overview** - A compelling introduction to the business, what it does, and its mission.\n";
+        $prompt .= "2. **Problem & Solution** - Clearly articulate the market problem and how this business solves it.\n";
+        $prompt .= "3. **Market Opportunity** - Describe the target market, its size, growth potential, and why now is the right time.\n";
+        $prompt .= "4. **Revenue Model** - Explain how the business generates revenue, pricing strategy, and scalability.\n";
+        $prompt .= "5. **Competitive Advantage** - What differentiates this business from competitors. Include a competitive moat analysis.\n";
+        $prompt .= "6. **Team & Operations** - Highlight the leadership team, operational model, and key strengths.\n";
+        $prompt .= "7. **Financial Highlights** - Provide realistic 3-year revenue projections, key financial metrics, and break-even timeline.\n";
+        $prompt .= "8. **Funding Requirements & Use of Funds** - Detail the capital needed, how it will be allocated, and expected ROI.\n";
+        $prompt .= "9. **Call to Action** - A compelling closing that invites investors/banks to engage.\n\n";
+
+        $prompt .= "TONE: Professional, confident, data-driven. Suitable for bank presentations and investor meetings.\n";
+        $prompt .= "FORMAT: Use clear headings, bullet points where appropriate, and bold key metrics.\n";
+        if ($language !== 'English') {
+            $prompt .= "LANGUAGE: Please write the entire Executive Summary in {$language}.\n";
+        }
+        $prompt .= "LENGTH: 2-3 pages when printed.\n\n";
+        $prompt .= "At the end, add a footer: \"Prepared by 48HoursReady.com - Learn. Structure. Earn.\"\n";
+
+        return $prompt;
+    }
+
+    /**
+     * Build a NotebookLM source document from intake data.
+     */
+    private function build_notebooklm_doc($f) {
+        $business_name = $f['business_name'] ?? 'the business';
+        $owner = $f['full_name'] ?? 'the owner';
+        $email = $f['email'] ?? '';
+        $phone = $f['phone'] ?? '';
+        $stage = $f['business_stage'] ?? '';
+        $purpose = $f['purpose'] ?? '';
+        $industry = $f['industry'] ?? '';
+        $one_sentence = $f['one_sentence'] ?? '';
+        $description = $f['description'] ?? $one_sentence;
+        $target_market = $f['target_market'] ?? '';
+        $revenue_model = $f['revenue_model'] ?? '';
+        $funding_needed = $f['funding_needed'] ?? '';
+        $funding_purpose = $f['funding_purpose'] ?? '';
+        $competitive_adv = $f['competitive_advantage'] ?? '';
+        $num_employees = $f['num_employees'] ?? '';
+        $location = $f['location'] ?? '';
+        $language = $f['language'] ?? 'English';
+        $additional = $f['additional_info'] ?? '';
+        $brand_color = $f['brand_color'] ?? '';
+        $package = $f['package_val'] ?? '';
+
+        $stage_label = ucfirst($stage);
+        if ($stage === 'idea') $stage_label = 'Idea / Concept Stage';
+        if ($stage === 'business') $stage_label = 'Operating Business';
+        if ($stage === 'bank') $stage_label = 'Preparing for Bank Presentation';
+
+        $purpose_label = ucfirst($purpose);
+        if ($purpose === 'launch') $purpose_label = 'New Business Launch';
+        if ($purpose === 'investor') $purpose_label = 'Investor Pitch Package';
+        if ($purpose === 'bank-ready') $purpose_label = 'Bank-Ready Funding Package';
+
+        $date = date('F j, Y');
+
+        $doc = "========================================\n";
+        $doc .= "BUSINESS INTELLIGENCE DOCUMENT\n";
+        $doc .= "{$business_name}\n";
+        $doc .= "Prepared: {$date}\n";
+        $doc .= "Prepared by: 48HoursReady.com\n";
+        $doc .= "========================================\n\n";
+
+        // Section 1: Business Overview
+        $doc .= "--- SECTION 1: BUSINESS OVERVIEW AND CONTEXT ---\n\n";
+        $doc .= "Business Name: {$business_name}\n";
+        $doc .= "Founded by: {$owner}\n";
+        if ($email) $doc .= "Contact Email: {$email}\n";
+        if ($phone) $doc .= "Phone: {$phone}\n";
+        if ($industry) $doc .= "Industry: {$industry}\n";
+        if ($location) $doc .= "Headquarters: {$location}\n";
+        if ($stage_label) $doc .= "Current Stage: {$stage_label}\n";
+        if ($purpose_label) $doc .= "Package Purpose: {$purpose_label}\n";
+        if ($package) $doc .= "Selected Package: {$package}\n";
+        if ($num_employees) $doc .= "Team Size: {$num_employees} employees\n";
+        if ($brand_color) $doc .= "Brand Color: {$brand_color}\n";
+        if ($language !== 'English') $doc .= "Preferred Language: {$language}\n";
+        $doc .= "\n";
+
+        if ($one_sentence) {
+            $doc .= "One-Sentence Summary: {$one_sentence}\n\n";
+        }
+
+        if ($description) {
+            $doc .= "Detailed Business Description:\n{$description}\n\n";
+        }
+
+        $doc .= "{$business_name} is a company operating in the {$industry} sector";
+        if ($location) $doc .= ", based in {$location}";
+        $doc .= ". Under the leadership of {$owner}, the company";
+        if ($stage === 'idea') {
+            $doc .= " is in the concept and development phase, building the foundation for a scalable business model";
+        } elseif ($stage === 'bank') {
+            $doc .= " is preparing its business case for bank financing to support the next stage of growth";
+        } else {
+            $doc .= " is actively operating and serving its customer base";
+        }
+        $doc .= ".\n\n";
+
+        // Section 2: Problem/Solution
+        $doc .= "--- SECTION 2: PROBLEM AND SOLUTION NARRATIVE ---\n\n";
+        $doc .= "The Market Problem:\n";
+        $doc .= "Customers within the {$industry} landscape face persistent challenges including limited access to reliable and specialized solutions, fragmented service quality, inconsistent pricing, and a shortage of providers who genuinely understand their unique needs. Many existing alternatives in the market are either prohibitively expensive, overly generic, or fail to deliver results consistently.\n\n";
+        $doc .= "The Solution:\n";
+        $doc .= "{$business_name} addresses these pain points directly by combining deep industry knowledge with a customer-first approach. ";
+        if ($description) {
+            $doc .= "Specifically, the business delivers: {$description} ";
+        }
+        $doc .= "The result is higher customer satisfaction, improved retention rates, and stronger organic referral growth.\n\n";
+
+        // Section 3: Target Market
+        $doc .= "--- SECTION 3: TARGET MARKET ANALYSIS ---\n\n";
+        if ($target_market) {
+            $doc .= "Primary Target Market: {$target_market}\n\n";
+        }
+        $doc .= "Market Segmentation:\n";
+        $doc .= "- Primary Segment: Core customers with immediate, recurring needs who form the revenue backbone of the business\n";
+        $doc .= "- Secondary Segment: Adjacent market segments that benefit from the same solutions and provide expansion opportunities\n";
+        $doc .= "- Growth Segment: Broader audience that converts over time through word-of-mouth, referrals, and brand awareness\n\n";
+        $doc .= "Key Market Drivers:\n";
+        $doc .= "- Growing consumer expectations for personalized, high-quality experiences\n";
+        $doc .= "- Industry modernization creating gaps that agile, customer-focused companies can fill\n";
+        $doc .= "- Underserved niches where established incumbents have failed to innovate\n";
+        $doc .= "- Favorable economic and demographic trends supporting growth in the {$industry} sector\n\n";
+
+        // Section 4: Revenue Model
+        $doc .= "--- SECTION 4: REVENUE MODEL AND FINANCIAL STRATEGY ---\n\n";
+        if ($revenue_model) {
+            $doc .= "Revenue Generation Strategy: {$revenue_model}\n\n";
+        }
+        $doc .= "Revenue Model Characteristics:\n";
+        $doc .= "- Designed for scalability with improving unit economics as the customer base grows\n";
+        $doc .= "- Structured to generate predictable, recurring cash flows\n";
+        $doc .= "- Built-in compounding growth effect: expanding customer base drives improving margins\n";
+        $doc .= "- Multiple revenue streams reduce dependency on any single income source\n\n";
+
+        // Financial projections
+        if ($funding_needed) {
+            preg_match('/[\$]?([\d,]+)/', $funding_needed, $fm);
+            $funding_val = !empty($fm[1]) ? intval(str_replace(',', '', $fm[1])) : 100000;
+            $base = max(50000, $funding_val * 0.8);
+
+            $doc .= "Financial Projections (3-Year Outlook):\n";
+            $doc .= "- Year 1 Revenue: $" . number_format($base) . " | Net Profit: $" . number_format($base * 0.15) . " (15% margin)\n";
+            $doc .= "- Year 2 Revenue: $" . number_format($base * 1.75) . " | Net Profit: $" . number_format($base * 1.75 * 0.25) . " (25% margin)\n";
+            $doc .= "- Year 3 Revenue: $" . number_format($base * 2.8) . " | Net Profit: $" . number_format($base * 2.8 * 0.33) . " (33% margin)\n";
+            $doc .= "- Break-even expected within 6-12 months of funded operations\n";
+            $doc .= "- Full ROI projected within 18-24 months\n\n";
+        }
+
+        // Section 5: Competitive Advantages
+        $doc .= "--- SECTION 5: COMPETITIVE ADVANTAGES ---\n\n";
+        if ($competitive_adv) {
+            $doc .= "Core Differentiator: {$competitive_adv}\n\n";
+        }
+        $doc .= "Competitive Position:\n";
+        $doc .= "- Higher customer lifetime value through trust-based relationships and superior service\n";
+        $doc .= "- Growing brand reputation driven by organic referrals and quality-focused delivery\n";
+        $doc .= "- Defensible market position built on a unique combination of expertise, responsiveness, and value\n";
+        $doc .= "- Ability to outmaneuver larger, slower competitors through agility and customer intimacy\n\n";
+
+        // Section 6: Team & Operations
+        $doc .= "--- SECTION 6: TEAM AND OPERATIONS ---\n\n";
+        $doc .= "Leadership: {$owner} (Founder & CEO)\n";
+        $doc .= "{$owner} brings hands-on expertise and deep understanding of the {$industry} market. The founder's vision, industry relationships, and operational skills form the backbone of the company's competitive position.\n\n";
+        if ($num_employees) {
+            $doc .= "Current Team Size: {$num_employees} employees\n";
+        }
+        $doc .= "Operational Model:\n";
+        $doc .= "- Lean overhead with scalable, repeatable processes\n";
+        $doc .= "- Data-informed decision making at every level\n";
+        $doc .= "- Continuous improvement driven by customer feedback loops\n";
+        $doc .= "- Strategic partnerships to extend capabilities without increasing fixed costs\n";
+        $doc .= "- Clear roles and accountability across all business functions\n\n";
+
+        $doc .= "Growth Staffing Plan:\n";
+        $doc .= "- Phase 1 (Current): Core team in place\n";
+        $doc .= "- Phase 2 (Months 1-6): Add 2-3 key hires (sales lead, operations support)\n";
+        $doc .= "- Phase 3 (Months 7-18): Add 3-5 positions (marketing specialist, delivery staff, admin)\n\n";
+
+        // Section 7: Funding
+        $doc .= "--- SECTION 7: FUNDING NEEDS AND USE OF FUNDS ---\n\n";
+        if ($funding_needed) {
+            $doc .= "Capital Required: {$funding_needed}\n\n";
+        }
+        if ($funding_purpose) {
+            $doc .= "Primary Use of Funds: {$funding_purpose}\n\n";
+        }
+        $doc .= "Suggested Funding Allocation:\n";
+        $doc .= "- Operations & Infrastructure: 30% - Equipment, systems, workspace, and technology\n";
+        $doc .= "- Marketing & Customer Acquisition: 30% - Digital marketing, brand building, lead generation\n";
+        $doc .= "- Working Capital: 25% - Payroll, inventory, and day-to-day operating expenses\n";
+        $doc .= "- Reserve & Contingency: 15% - Buffer for unexpected costs and market opportunities\n\n";
+
+        $doc .= "Expected Return for Investors/Lenders:\n";
+        $doc .= "- Clear path to profitability within 12-18 months\n";
+        $doc .= "- Conservative, achievable financial projections\n";
+        $doc .= "- Experienced, committed leadership with skin in the game\n";
+        $doc .= "- Scalable business model with expanding margins\n";
+        $doc .= "- Transparent reporting and regular financial updates\n\n";
+
+        // Section 8: Additional
+        if ($additional) {
+            $doc .= "--- SECTION 8: ADDITIONAL CONTEXT AND NOTES ---\n\n";
+            $doc .= "{$additional}\n\n";
+        }
+
+        // Closing
+        $doc .= "========================================\n";
+        $doc .= "END OF BUSINESS INTELLIGENCE DOCUMENT\n";
+        $doc .= "{$business_name} | {$owner}\n";
+        $doc .= "Prepared by 48HoursReady.com - Learn. Structure. Earn.\n";
+        $doc .= "========================================\n";
+
+        return $doc;
     }
 }
 
