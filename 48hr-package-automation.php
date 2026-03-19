@@ -179,11 +179,9 @@ class HR48_Package_Automation {
             wp_send_json_error(['message' => 'Database error. Please try again.']);
         }
 
-        // Try to generate immediately if API key is set
+        // Generate documents immediately — uses AI if API key is set, templates otherwise
         $api_key = get_option('hr48_openai_api_key');
-        if (!empty($api_key)) {
-            $this->run_generation($wpdb->insert_id, $api_key);
-        }
+        $this->run_generation($wpdb->insert_id, $api_key);
 
         $results_page = get_page_by_path('package-results');
         $results_url = $results_page ? get_permalink($results_page) : home_url('/package-results/');
@@ -195,7 +193,7 @@ class HR48_Package_Automation {
         ]);
     }
 
-    private function run_generation($submission_id, $api_key) {
+    private function run_generation($submission_id, $api_key = '') {
         global $wpdb;
 
         $row = $wpdb->get_row($wpdb->prepare(
@@ -204,18 +202,31 @@ class HR48_Package_Automation {
 
         if (!$row) return false;
 
-        // Build context for AI
-        $context = $this->build_ai_context($row);
+        $use_ai = !empty($api_key);
 
-        // Generate Executive Summary
-        $exec_summary = $this->call_openai($api_key, $this->get_exec_summary_prompt($context));
-        if ($exec_summary) {
+        if ($use_ai) {
+            // AI-powered generation via OpenAI
+            $context = $this->build_ai_context($row);
+
+            $exec_summary = $this->call_openai($api_key, $this->get_exec_summary_prompt($context));
+            if ($exec_summary) {
+                $wpdb->update($this->table_name, ['exec_summary' => $exec_summary], ['id' => $submission_id]);
+            }
+
+            $business_plan = $this->call_openai($api_key, $this->get_business_plan_prompt($context));
+            if ($business_plan) {
+                $wpdb->update($this->table_name, [
+                    'business_plan' => $business_plan,
+                    'status' => 'generated',
+                    'generated_at' => current_time('mysql'),
+                ], ['id' => $submission_id]);
+            }
+        } else {
+            // Template-based generation (no API key required)
+            $exec_summary = $this->generate_from_template($row, 'exec_summary');
             $wpdb->update($this->table_name, ['exec_summary' => $exec_summary], ['id' => $submission_id]);
-        }
 
-        // Generate Business Plan
-        $business_plan = $this->call_openai($api_key, $this->get_business_plan_prompt($context));
-        if ($business_plan) {
+            $business_plan = $this->generate_from_template($row, 'business_plan');
             $wpdb->update($this->table_name, [
                 'business_plan' => $business_plan,
                 'status' => 'generated',
@@ -227,6 +238,416 @@ class HR48_Package_Automation {
         $this->send_notification_email($row, $exec_summary, $business_plan);
 
         return true;
+    }
+
+    /**
+     * Generate professional documents from templates using business intake data.
+     *
+     * @param object $row  The database row with all submission fields.
+     * @param string $type Either 'exec_summary' or 'business_plan'.
+     * @return string Markdown-formatted document content.
+     */
+    private function generate_from_template($row, $type) {
+        // Prepare data with sensible defaults for empty fields
+        $d = (object) [
+            'business_name'        => !empty($row->business_name) ? $row->business_name : 'Our Company',
+            'owner_name'           => !empty($row->owner_name) ? $row->owner_name : 'the Founder',
+            'email'                => !empty($row->email) ? $row->email : '',
+            'phone'                => !empty($row->phone) ? $row->phone : '',
+            'industry'             => !empty($row->industry) ? $row->industry : 'General Business',
+            'business_stage'       => !empty($row->business_stage) ? $row->business_stage : 'Early Stage',
+            'business_description' => !empty($row->business_description) ? $row->business_description : 'A growing enterprise delivering value to its customers.',
+            'target_market'        => !empty($row->target_market) ? $row->target_market : 'consumers and businesses seeking quality solutions',
+            'revenue_model'        => !empty($row->revenue_model) ? $row->revenue_model : 'direct sales and recurring service revenue',
+            'funding_needed'       => !empty($row->funding_needed) ? $row->funding_needed : 'To be determined',
+            'funding_purpose'      => !empty($row->funding_purpose) ? $row->funding_purpose : 'operational expansion, marketing, and working capital',
+            'competitive_advantage'=> !empty($row->competitive_advantage) ? $row->competitive_advantage : 'a commitment to quality, customer service, and innovation',
+            'num_employees'        => !empty($row->num_employees) ? $row->num_employees : '1-5',
+            'location'             => !empty($row->location) ? $row->location : 'United States',
+            'website'              => !empty($row->website) ? $row->website : '',
+        ];
+
+        $date = date('F j, Y');
+
+        // Determine stage label for narrative
+        $stage_label = strtolower($d->business_stage);
+        $stage_narrative = 'an emerging';
+        if (strpos($stage_label, 'growth') !== false || strpos($stage_label, 'established') !== false) {
+            $stage_narrative = 'a growing';
+        } elseif (strpos($stage_label, 'startup') !== false || strpos($stage_label, 'idea') !== false) {
+            $stage_narrative = 'an innovative startup';
+        } elseif (strpos($stage_label, 'mature') !== false || strpos($stage_label, 'scale') !== false) {
+            $stage_narrative = 'a well-established';
+        }
+
+        if ($type === 'exec_summary') {
+            return $this->template_exec_summary($d, $date, $stage_narrative);
+        }
+
+        return $this->template_business_plan($d, $date, $stage_narrative);
+    }
+
+    /**
+     * Executive Summary template.
+     */
+    private function template_exec_summary($d, $date, $stage_narrative) {
+        $website_line = !empty($d->website) ? " | Website: {$d->website}" : '';
+        $phone_line = !empty($d->phone) ? " | Phone: {$d->phone}" : '';
+
+        $md = <<<MD
+# Executive Summary
+
+**{$d->business_name}**
+*Prepared on {$date}*
+*Contact: {$d->owner_name} — {$d->email}{$phone_line}{$website_line}*
+
+---
+
+## Company Overview
+
+{$d->business_name} is {$stage_narrative} enterprise operating in the **{$d->industry}** sector, headquartered in **{$d->location}**. Under the leadership of {$d->owner_name}, the company has been built on a clear vision: to deliver measurable value to its customers through quality products, reliable service, and continuous innovation.
+
+{$d->business_description}
+
+The company currently operates with a lean, focused team of **{$d->num_employees}** employees, maintaining operational efficiency while positioning for strategic growth.
+
+## Problem & Solution
+
+Customers within the {$d->industry} landscape face persistent challenges — including limited access to reliable solutions, fragmented service quality, and a lack of providers who genuinely understand their needs. Many existing alternatives are either too costly, too generic, or fail to deliver consistent results.
+
+**{$d->business_name}** addresses these pain points directly. By combining deep industry knowledge with a customer-first approach, the company delivers solutions that are practical, effective, and tailored to the real-world needs of its audience. The result is higher satisfaction, better retention, and stronger word-of-mouth referrals.
+
+## Market Opportunity
+
+The target market for {$d->business_name} consists of **{$d->target_market}**. This segment represents a substantial and growing opportunity driven by increasing demand for specialized, high-quality offerings in the {$d->industry} space.
+
+Key market drivers include:
+
+- **Growing consumer expectations** for personalized, high-quality experiences
+- **Industry modernization** creating gaps that nimble, customer-focused companies can fill
+- **Underserved niches** where incumbents have failed to innovate or deliver adequate service
+- **Favorable economic trends** supporting spending in the {$d->industry} sector
+
+{$d->business_name} is well-positioned to capture meaningful market share by focusing on the segments most underserved by larger, less agile competitors.
+
+## Revenue Model
+
+The company generates revenue through **{$d->revenue_model}**.
+
+This model is designed for scalability and predictable cash flow, enabling the business to reinvest in growth while maintaining healthy margins. As the customer base expands, unit economics improve, creating a compounding growth effect over time.
+
+## Competitive Advantage
+
+What sets {$d->business_name} apart is **{$d->competitive_advantage}**.
+
+In an industry where many competitors focus solely on price or volume, {$d->business_name} differentiates by delivering genuine value and building trust-based relationships. This strategic positioning translates into:
+
+- Higher customer lifetime value and retention rates
+- Stronger brand reputation and organic referral growth
+- A defensible market position that is difficult for competitors to replicate
+
+## Team & Operations
+
+Led by **{$d->owner_name}**, the leadership team brings hands-on expertise and a deep understanding of the {$d->industry} market. The current team of {$d->num_employees} is structured for efficiency, with clear roles and accountability across core business functions.
+
+The operational model emphasizes:
+
+- Lean overhead with scalable processes
+- Data-informed decision making
+- Continuous improvement and customer feedback loops
+- Strategic partnerships to extend capabilities without fixed overhead
+
+## Call to Action
+
+{$d->business_name} is seeking **{$d->funding_needed}** in funding to accelerate its next phase of growth. The capital will be deployed toward **{$d->funding_purpose}**, directly supporting the company's path to increased revenue, broader market reach, and long-term profitability.
+
+This is an opportunity to invest in a focused, founder-led company with proven market demand, a clear revenue model, and a realistic plan for scalable growth. We invite prospective partners and investors to schedule a meeting with {$d->owner_name} to discuss terms, review detailed financial projections, and explore how we can grow together.
+
+---
+
+*This Executive Summary was prepared by 48HoursReady.com — Learn. Structure. Earn.*
+MD;
+
+        return $md;
+    }
+
+    /**
+     * Business Plan template.
+     */
+    private function template_business_plan($d, $date, $stage_narrative) {
+        $website_line = !empty($d->website) ? " | {$d->website}" : '';
+        $phone_line = !empty($d->phone) ? " | {$d->phone}" : '';
+
+        // Generate realistic financial projections based on funding amount
+        $funding_raw = preg_replace('/[^0-9.]/', '', $d->funding_needed);
+        $base_revenue = max(50000, intval($funding_raw) * 0.8);
+        if ($base_revenue < 50000) $base_revenue = 100000;
+
+        $yr1_revenue = number_format($base_revenue);
+        $yr2_revenue = number_format($base_revenue * 1.75);
+        $yr3_revenue = number_format($base_revenue * 2.8);
+
+        $yr1_cogs = number_format($base_revenue * 0.45);
+        $yr2_cogs = number_format($base_revenue * 1.75 * 0.40);
+        $yr3_cogs = number_format($base_revenue * 2.8 * 0.37);
+
+        $yr1_gross = number_format($base_revenue * 0.55);
+        $yr2_gross = number_format($base_revenue * 1.75 * 0.60);
+        $yr3_gross = number_format($base_revenue * 2.8 * 0.63);
+
+        $yr1_opex = number_format($base_revenue * 0.40);
+        $yr2_opex = number_format($base_revenue * 1.75 * 0.35);
+        $yr3_opex = number_format($base_revenue * 2.8 * 0.30);
+
+        $yr1_net = number_format($base_revenue * 0.15);
+        $yr2_net = number_format($base_revenue * 1.75 * 0.25);
+        $yr3_net = number_format($base_revenue * 2.8 * 0.33);
+
+        $md = <<<MD
+# Business Plan
+
+**{$d->business_name}**
+*Prepared on {$date}*
+*{$d->owner_name} — {$d->email}{$phone_line}{$website_line}*
+*Location: {$d->location}*
+
+---
+
+## 1. Executive Summary
+
+{$d->business_name} is {$stage_narrative} company in the **{$d->industry}** sector, founded and led by {$d->owner_name}. The company is positioned to serve **{$d->target_market}** through a focused strategy of delivering high-quality solutions and building long-term customer relationships.
+
+{$d->business_description}
+
+The company generates revenue through **{$d->revenue_model}** and is seeking **{$d->funding_needed}** to fund the next phase of strategic growth. Funds will be allocated toward **{$d->funding_purpose}**, with the goal of achieving sustainable profitability and establishing a leading position within its target market.
+
+This business plan outlines the company's strategy, market opportunity, operational structure, and financial projections over the next three years.
+
+## 2. Company Description
+
+### Legal & Operational Overview
+
+- **Company Name:** {$d->business_name}
+- **Industry:** {$d->industry}
+- **Stage:** {$d->business_stage}
+- **Headquarters:** {$d->location}
+- **Team Size:** {$d->num_employees} employees
+- **Founded by:** {$d->owner_name}
+
+### Mission Statement
+
+To deliver exceptional value within the {$d->industry} sector by providing reliable, innovative, and customer-centered solutions that address real market needs and create lasting impact for our clients and community.
+
+### Vision Statement
+
+To become a recognized, trusted leader in the {$d->industry} space — known for quality, integrity, and a relentless commitment to the success of every customer we serve.
+
+### Core Values
+
+1. **Customer Obsession** — Every decision starts with the customer's needs
+2. **Quality Without Compromise** — We set and maintain the highest standards
+3. **Transparency** — We operate with honesty and open communication
+4. **Continuous Improvement** — We invest in learning, innovation, and efficiency
+5. **Community Impact** — We measure success by the value we create for others
+
+## 3. Market Analysis
+
+### Industry Overview
+
+The {$d->industry} sector continues to demonstrate strong growth fundamentals, driven by evolving consumer demands, technological advancement, and increasing market sophistication. Companies that can deliver specialized, high-quality offerings are particularly well-positioned to outperform.
+
+### Target Market
+
+{$d->business_name} serves **{$d->target_market}**. This customer segment values quality, reliability, and a provider that understands their specific requirements.
+
+### Market Segmentation
+
+| Segment | Description | Priority |
+|---------|-------------|----------|
+| **Primary** | Core customers within {$d->target_market} who have immediate, recurring needs | High |
+| **Secondary** | Adjacent market segments that benefit from the same solutions | Medium |
+| **Tertiary** | Broader market participants who may convert over time through referrals | Growth |
+
+### Competitive Landscape
+
+The market includes both established incumbents and emerging competitors. However, many existing players suffer from:
+
+- Lack of specialization or personalization
+- Poor customer service and long response times
+- Inflexible pricing models
+- Inability to adapt quickly to changing customer needs
+
+{$d->business_name} exploits these weaknesses by offering a more responsive, customer-focused alternative with distinct advantages in quality and relationship management.
+
+### SWOT Analysis
+
+| | **Positive** | **Negative** |
+|---|---|---|
+| **Internal** | **Strengths:** {$d->competitive_advantage}; lean operations; founder expertise | **Weaknesses:** Limited brand awareness at current stage; small team capacity |
+| **External** | **Opportunities:** Growing market demand; underserved niches; partnership potential | **Threats:** Competitive pressure; economic fluctuations; regulatory changes |
+
+## 4. Organization & Management
+
+### Leadership Team
+
+**{$d->owner_name}** — *Founder & CEO*
+{$d->owner_name} leads all strategic and operational decisions, bringing deep knowledge of the {$d->industry} sector and a hands-on management approach. The founder's vision, industry relationships, and operational expertise form the backbone of the company's competitive position.
+
+### Organizational Structure
+
+The company operates with a flat, agile structure designed for speed and accountability:
+
+- **Executive Leadership** — Strategic direction, partnerships, and fundraising
+- **Operations** — Service delivery, quality assurance, and process optimization
+- **Sales & Marketing** — Customer acquisition, brand building, and retention
+- **Finance & Administration** — Bookkeeping, compliance, and reporting
+
+### Staffing Plan
+
+| Phase | Timeline | Team Size | Key Hires |
+|-------|----------|-----------|-----------|
+| **Current** | Now | {$d->num_employees} | Core team in place |
+| **Phase 2** | Months 1–6 | +2-3 | Sales lead, Operations support |
+| **Phase 3** | Months 7–18 | +3-5 | Marketing specialist, Additional delivery staff, Admin |
+
+## 5. Products & Services
+
+### Core Offering
+
+{$d->business_description}
+
+### Value Proposition
+
+Customers choose {$d->business_name} because we deliver:
+
+- **Specialized expertise** — Deep knowledge of the {$d->industry} sector
+- **Personalized service** — Tailored solutions rather than one-size-fits-all
+- **Reliable results** — Consistent quality backed by proven processes
+- **Responsive support** — Fast, accessible communication and problem resolution
+- **Fair value** — Competitive pricing aligned with the quality delivered
+
+### Service Delivery Model
+
+1. **Consultation & Discovery** — Understand the customer's specific needs and goals
+2. **Solution Design** — Create a tailored plan that addresses identified requirements
+3. **Delivery & Execution** — Implement with attention to quality and timeliness
+4. **Follow-Up & Support** — Ensure satisfaction and identify opportunities for continued service
+
+## 6. Marketing & Sales Strategy
+
+### Brand Positioning
+
+{$d->business_name} positions itself as a trusted, quality-focused provider in the {$d->industry} space — the go-to choice for customers who value expertise, reliability, and personal service over the cheapest option.
+
+### Marketing Channels
+
+| Channel | Strategy | Expected Impact |
+|---------|----------|-----------------|
+| **Digital Marketing** | SEO, content marketing, paid search | Primary lead generation |
+| **Social Media** | Platform-specific content, community engagement | Brand awareness, trust building |
+| **Referral Program** | Incentivized word-of-mouth from satisfied customers | High-quality leads, low CAC |
+| **Networking & Partnerships** | Industry events, strategic alliances | Credibility, B2B opportunities |
+| **Email Marketing** | Nurture sequences, newsletters, offers | Retention, upselling |
+
+### Sales Process
+
+1. **Lead Generation** — Attract qualified prospects through marketing and referrals
+2. **Qualification** — Assess fit and readiness through discovery conversation
+3. **Proposal** — Present a clear, compelling offer tailored to the prospect's needs
+4. **Close** — Address objections, finalize terms, and onboard the customer
+5. **Retain & Upsell** — Deliver exceptional experience and expand the relationship over time
+
+### Customer Retention Strategy
+
+- Regular follow-ups and satisfaction checks
+- Loyalty rewards and exclusive offers for repeat customers
+- Proactive communication about new services and improvements
+- Quarterly feedback surveys to drive continuous improvement
+
+## 7. Financial Projections
+
+### Three-Year Revenue Forecast
+
+| Metric | Year 1 | Year 2 | Year 3 |
+|--------|--------|--------|--------|
+| **Revenue** | \${$yr1_revenue} | \${$yr2_revenue} | \${$yr3_revenue} |
+| **Cost of Goods/Services** | \${$yr1_cogs} | \${$yr2_cogs} | \${$yr3_cogs} |
+| **Gross Profit** | \${$yr1_gross} | \${$yr2_gross} | \${$yr3_gross} |
+| **Operating Expenses** | \${$yr1_opex} | \${$yr2_opex} | \${$yr3_opex} |
+| **Net Income** | \${$yr1_net} | \${$yr2_net} | \${$yr3_net} |
+
+### Key Assumptions
+
+- Revenue growth driven by expanded marketing, referral acceleration, and service expansion
+- Gross margins improve as operational efficiency increases with scale
+- Operating expenses decline as a percentage of revenue due to fixed cost leverage
+- Conservative customer acquisition cost estimates with gradual improvement
+- No extraordinary one-time income or expenses included
+
+### Break-Even Analysis
+
+Based on projected fixed costs and average contribution margins, {$d->business_name} anticipates reaching operational break-even within the first **6–12 months** of funded operations. Full return on invested capital is projected within **18–24 months**.
+
+## 8. Funding Requirements
+
+### Capital Needed
+
+{$d->business_name} is seeking **{$d->funding_needed}** to execute the growth strategy outlined in this plan.
+
+### Use of Funds
+
+| Category | Allocation | Purpose |
+|----------|------------|---------|
+| **Operations & Infrastructure** | 30% | Equipment, systems, workspace, technology |
+| **Marketing & Customer Acquisition** | 30% | Digital marketing, brand building, lead generation |
+| **Working Capital** | 25% | Payroll, inventory, day-to-day operating expenses |
+| **Reserve & Contingency** | 15% | Buffer for unexpected costs and market opportunities |
+
+### Detailed Funding Purpose
+
+{$d->funding_purpose}
+
+### Return on Investment
+
+Investors and lenders can expect:
+
+- Clear path to profitability within 12–18 months
+- Conservative, achievable financial projections based on market data
+- Experienced leadership with a proven ability to execute
+- Scalable business model with expanding margins
+- Transparent reporting and regular financial updates
+
+## 9. Implementation Timeline
+
+| Phase | Timeline | Key Milestones |
+|-------|----------|----------------|
+| **Phase 1: Foundation** | Months 1–3 | Secure funding; finalize operations setup; launch initial marketing campaigns; onboard first wave of customers |
+| **Phase 2: Growth** | Months 4–8 | Scale marketing spend; hire key team members; optimize service delivery; establish referral pipeline |
+| **Phase 3: Optimization** | Months 9–14 | Refine operations for efficiency; expand service offerings; strengthen brand presence; achieve consistent monthly revenue targets |
+| **Phase 4: Expansion** | Months 15–24 | Explore new market segments or geographies; invest in technology and automation; pursue strategic partnerships; prepare for next funding round or reinvestment |
+| **Phase 5: Maturity** | Months 25–36 | Solidify market leadership position; maximize profitability; evaluate exit or expansion opportunities; build long-term enterprise value |
+
+---
+
+## Appendix
+
+### Contact Information
+
+- **Business:** {$d->business_name}
+- **Owner:** {$d->owner_name}
+- **Email:** {$d->email}
+- **Location:** {$d->location}
+
+### Disclaimer
+
+This business plan has been prepared based on information provided by the business owner and reasonable market assumptions. Financial projections are forward-looking estimates and actual results may vary based on market conditions, execution, and external factors. This document is intended for planning and presentation purposes and should not be construed as a guarantee of future performance.
+
+---
+
+*This Business Plan was prepared by 48HoursReady.com — Learn. Structure. Earn.*
+MD;
+
+        return $md;
     }
 
     private function build_ai_context($row) {
@@ -336,13 +757,10 @@ class HR48_Package_Automation {
         $id = intval($_POST['submission_id'] ?? 0);
         $api_key = get_option('hr48_openai_api_key');
 
-        if (empty($api_key)) {
-            wp_send_json_error(['message' => 'OpenAI API key not set. Go to Settings > 48HR Automation.']);
-        }
-
         $result = $this->run_generation($id, $api_key);
         if ($result) {
-            wp_send_json_success(['message' => 'Documents generated successfully!']);
+            $method = !empty($api_key) ? 'AI' : 'template';
+            wp_send_json_success(['message' => "Documents generated successfully via {$method}!"]);
         } else {
             wp_send_json_error(['message' => 'Generation failed. Check error log.']);
         }
@@ -463,6 +881,42 @@ class HR48_Package_Automation {
         // Basic markdown to HTML conversion
         $text = esc_html($text);
 
+        // --- Markdown tables ---
+        // Match table blocks: header row, separator row, then data rows
+        $text = preg_replace_callback(
+            '/^(\|.+\|)\n(\|[\s\-\|:]+\|)\n((?:\|.+\|\n?)+)/m',
+            function ($match) {
+                $header_line = trim($match[1]);
+                $body_lines  = trim($match[3]);
+
+                // Parse header cells
+                $headers = array_map('trim', explode('|', trim($header_line, '|')));
+                $html = '<table><thead><tr>';
+                foreach ($headers as $h) {
+                    $html .= '<th>' . $h . '</th>';
+                }
+                $html .= '</tr></thead><tbody>';
+
+                // Parse body rows
+                foreach (explode("\n", $body_lines) as $line) {
+                    $line = trim($line);
+                    if (empty($line)) continue;
+                    $cells = array_map('trim', explode('|', trim($line, '|')));
+                    $html .= '<tr>';
+                    foreach ($cells as $cell) {
+                        $html .= '<td>' . $cell . '</td>';
+                    }
+                    $html .= '</tr>';
+                }
+                $html .= '</tbody></table>';
+                return $html;
+            },
+            $text
+        );
+
+        // --- Horizontal rules ---
+        $text = preg_replace('/^---+$/m', '<hr>', $text);
+
         // Headers
         $text = preg_replace('/^### (.+)$/m', '<h3>$1</h3>', $text);
         $text = preg_replace('/^## (.+)$/m', '<h2>$1</h2>', $text);
@@ -492,6 +946,10 @@ class HR48_Package_Automation {
         $text = str_replace('</h3></p>', '</h3>', $text);
         $text = preg_replace('/<p>\s*<ul>/', '<ul>', $text);
         $text = preg_replace('/<\/ul>\s*<\/p>/', '</ul>', $text);
+        $text = preg_replace('/<p>\s*<table>/', '<table>', $text);
+        $text = preg_replace('/<\/table>\s*<\/p>/', '</table>', $text);
+        $text = preg_replace('/<p>\s*<hr>/', '<hr>', $text);
+        $text = preg_replace('/<hr>\s*<\/p>/', '<hr>', $text);
 
         return $text;
     }
@@ -544,16 +1002,13 @@ class HR48_Package_Automation {
     public function render_submissions_page() {
         global $wpdb;
 
-        // Handle regeneration
+        // Handle regeneration — uses AI if key is set, otherwise templates
         if (isset($_GET['regenerate']) && check_admin_referer('hr48_regen')) {
             $id = intval($_GET['regenerate']);
             $api_key = get_option('hr48_openai_api_key');
-            if (!empty($api_key)) {
-                $this->run_generation($id, $api_key);
-                echo '<div class="updated"><p>Documents regenerated.</p></div>';
-            } else {
-                echo '<div class="error"><p>Set your OpenAI API key first.</p></div>';
-            }
+            $this->run_generation($id, $api_key);
+            $method = !empty($api_key) ? 'AI' : 'template';
+            echo '<div class="updated"><p>Documents regenerated via ' . esc_html($method) . '.</p></div>';
         }
 
         $submissions = $wpdb->get_results("SELECT * FROM {$this->table_name} ORDER BY created_at DESC LIMIT 50");
