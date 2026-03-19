@@ -8,7 +8,11 @@
 
 if (!defined('ABSPATH')) exit;
 
-require_once __DIR__ . '/vendor/autoload.php';
+// Load vendor autoload only if it exists (prevents fatal error during partial installs)
+if (file_exists(__DIR__ . '/vendor/autoload.php')) {
+    require_once __DIR__ . '/vendor/autoload.php';
+}
+define('HR48_HAS_FPDI', class_exists('\\setasign\\Fpdi\\Fpdi'));
 
 class HR48_Package_Automation {
 
@@ -2748,6 +2752,10 @@ MD;
 
         if (!current_user_can('manage_options')) {
             wp_send_json_error(['message' => 'Unauthorized.']);
+        }
+
+        if (!defined('HR48_HAS_FPDI') || !HR48_HAS_FPDI) {
+            wp_send_json_error(['message' => 'FPDI library not available. Please reinstall the plugin.']);
         }
 
         if (empty($_FILES['pdf_file']) || $_FILES['pdf_file']['error'] !== UPLOAD_ERR_OK) {
