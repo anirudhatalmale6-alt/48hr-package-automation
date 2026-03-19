@@ -378,9 +378,10 @@ MD;
         $website_line = !empty($d->website) ? " | {$d->website}" : '';
         $phone_line = !empty($d->phone) ? " | {$d->phone}" : '';
 
-        // Generate realistic financial projections based on funding amount
-        $funding_raw = preg_replace('/[^0-9.]/', '', $d->funding_needed);
-        $base_revenue = max(50000, intval($funding_raw) * 0.8);
+        // Generate realistic financial projections based on funding amount (extract first number from ranges)
+        preg_match('/[\$]?([\d,]+)/', $d->funding_needed, $fm);
+        $funding_val = !empty($fm[1]) ? intval(str_replace(',', '', $fm[1])) : 100000;
+        $base_revenue = max(50000, $funding_val * 0.8);
         if ($base_revenue < 50000) $base_revenue = 100000;
 
         $yr1_revenue = number_format($base_revenue);
@@ -802,10 +803,10 @@ MD;
         $doc_type = $is_business_plan ? 'Business Plan' : 'Executive Summary';
         $date = date('F j, Y');
 
-        // Parse funding amount for financial projections
-        $funding_raw = preg_replace('/[^0-9]/', '', $row->funding_needed);
-        $funding_num = max(50000, intval($funding_raw));
-        if ($funding_num < 50000) $funding_num = 100000;
+        // Parse funding amount for financial projections (extract first number from ranges like "$50,000 - $100,000")
+        preg_match('/[\$]?([\d,]+)/', $row->funding_needed, $m);
+        $funding_num = !empty($m[1]) ? intval(str_replace(',', '', $m[1])) : 100000;
+        if ($funding_num < 10000) $funding_num = 100000;
 
         // Financial projection calculations
         $base_revenue = $funding_num * 0.8;
