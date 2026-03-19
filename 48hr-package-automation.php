@@ -857,18 +857,18 @@ MD;
         @import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap");
 
         :root {
-            --cream: #F5F1EB;
-            --cream-dark: #EDE8E0;
-            --navy: #091263;
-            --navy-light: #1a2580;
-            --green: #009D45;
-            --green-light: #00C853;
-            --green-bg: rgba(0,157,69,0.08);
-            --dark: #1a1a2e;
-            --text: #2d2d3a;
-            --text-light: #6b6b7b;
+            --cream: #F0ECE3;
+            --cream-dark: #E8E3D9;
+            --gold: #B8975A;
+            --gold-light: #D4B87A;
+            --gold-bg: rgba(184,151,90,0.10);
+            --dark: #2D2D2D;
+            --dark-deep: #333333;
+            --charcoal: #1E1E1E;
+            --text: #2D2D2D;
+            --text-light: #7A7A7A;
             --white: #ffffff;
-            --shadow: 0 2px 20px rgba(9,18,99,0.08);
+            --black: #111111;
             --slide-w: 1120px;
             --slide-h: 630px;
         }
@@ -877,7 +877,7 @@ MD;
 
         body {
             font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            background: #e8e4de;
+            background: #D9D4CB;
             color: var(--text);
             line-height: 1.5;
             -webkit-font-smoothing: antialiased;
@@ -913,13 +913,13 @@ MD;
             max-width: 96vw;
             margin: 40px auto;
             background: var(--cream);
-            border-radius: 12px;
-            box-shadow: var(--shadow), 0 8px 40px rgba(0,0,0,0.10);
+            border-radius: 6px;
+            box-shadow: 0 2px 24px rgba(0,0,0,0.08);
             position: relative;
             overflow: hidden;
             display: flex;
             flex-direction: column;
-            padding: 48px 60px 40px;
+            padding: 48px 60px 44px;
         }
 
         /* ---------- PRINT BUTTON ---------- */
@@ -927,26 +927,26 @@ MD;
             position: fixed;
             top: 20px;
             right: 24px;
-            background: linear-gradient(135deg, var(--navy) 0%, var(--navy-light) 100%);
+            background: var(--dark);
             color: var(--white);
             border: none;
             padding: 14px 28px;
             border-radius: 50px;
             cursor: pointer;
             font-size: 15px;
-            font-weight: 600;
+            font-weight: 700;
             font-family: "Inter", sans-serif;
             z-index: 9999;
             display: flex;
             align-items: center;
             gap: 8px;
-            box-shadow: 0 4px 20px rgba(9,18,99,0.3);
+            box-shadow: 0 4px 20px rgba(0,0,0,0.2);
             transition: all 0.25s ease;
             letter-spacing: 0.3px;
         }
         .print-btn:hover {
-            background: linear-gradient(135deg, var(--green) 0%, var(--green-light) 100%);
-            box-shadow: 0 4px 24px rgba(0,157,69,0.35);
+            background: var(--gold);
+            box-shadow: 0 4px 24px rgba(184,151,90,0.35);
             transform: translateY(-1px);
         }
         .print-icon { font-size: 18px; }
@@ -960,8 +960,8 @@ MD;
             padding: 10px 20px;
             border-radius: 50px;
             font-size: 13px;
-            font-weight: 600;
-            color: var(--navy);
+            font-weight: 700;
+            color: var(--dark);
             z-index: 9999;
             box-shadow: 0 2px 12px rgba(0,0,0,0.08);
             letter-spacing: 0.3px;
@@ -974,42 +974,50 @@ MD;
             left: 0;
             right: 0;
             display: flex;
-            justify-content: space-between;
+            justify-content: center;
             align-items: center;
             padding: 12px 60px;
             font-size: 11px;
             color: var(--text-light);
-            border-top: 1px solid rgba(9,18,99,0.06);
-            background: rgba(255,255,255,0.3);
+            border-top: 1px solid rgba(0,0,0,0.06);
+            background: rgba(255,255,255,0.2);
         }
         .slide-footer .brand-mark {
             font-weight: 700;
-            color: var(--navy);
+            color: var(--dark);
             letter-spacing: 0.5px;
         }
-        .slide-footer .brand-mark span { color: var(--green); }
+        .slide-footer .brand-mark .gold { color: var(--gold); }
+        .slide-footer .page-num {
+            position: absolute;
+            right: 60px;
+            font-size: 11px;
+            color: var(--text-light);
+            font-weight: 500;
+        }
 
         /* ---------- TYPOGRAPHY ---------- */
         .slide-title {
-            font-size: 32px;
-            font-weight: 800;
-            color: var(--navy);
+            font-size: 40px;
+            font-weight: 900;
+            color: var(--black);
             margin-bottom: 6px;
-            letter-spacing: -0.5px;
-            line-height: 1.2;
+            letter-spacing: -0.8px;
+            line-height: 1.15;
         }
         .slide-subtitle {
             font-size: 15px;
-            color: var(--text-light);
+            color: var(--gold);
             margin-bottom: 28px;
-            font-weight: 400;
+            font-weight: 600;
+            letter-spacing: 0.3px;
         }
         .slide-body { flex: 1; overflow: hidden; }
 
         /* ---------- COVER SLIDE ---------- */
         .cover-slide {
-            background: linear-gradient(135deg, var(--navy) 0%, #0d1a7a 40%, #162090 100%);
-            color: var(--white);
+            background: var(--cream);
+            color: var(--black);
             justify-content: center;
             align-items: center;
             text-align: center;
@@ -1018,64 +1026,77 @@ MD;
         .cover-slide .cover-accent {
             width: 80px;
             height: 4px;
-            background: var(--green);
+            background: var(--gold);
             margin: 0 auto 32px;
             border-radius: 2px;
         }
         .cover-slide .cover-title {
-            font-size: 44px;
+            font-size: 48px;
             font-weight: 900;
-            letter-spacing: -1px;
-            line-height: 1.15;
+            letter-spacing: -1.5px;
+            line-height: 1.1;
             margin-bottom: 12px;
+            color: var(--black);
         }
         .cover-slide .cover-type {
-            font-size: 18px;
-            font-weight: 600;
-            color: var(--green);
+            font-size: 16px;
+            font-weight: 700;
+            color: var(--gold);
             text-transform: uppercase;
-            letter-spacing: 4px;
-            margin-bottom: 8px;
+            letter-spacing: 5px;
+            margin-bottom: 10px;
         }
         .cover-slide .cover-industry {
             font-size: 18px;
             font-weight: 400;
-            color: rgba(255,255,255,0.7);
+            color: var(--text-light);
             margin-bottom: 4px;
         }
         .cover-slide .cover-meta {
             font-size: 14px;
-            color: rgba(255,255,255,0.5);
+            color: var(--text-light);
             margin-top: 24px;
         }
         .cover-slide .cover-brand {
             position: absolute;
-            bottom: 36px;
+            bottom: 42px;
             left: 0;
             right: 0;
             text-align: center;
-            font-size: 13px;
-            color: rgba(255,255,255,0.4);
+            font-size: 12px;
+            color: var(--text-light);
             font-weight: 600;
-            letter-spacing: 1px;
+            letter-spacing: 0.5px;
         }
-        .cover-slide .cover-brand span { color: var(--green); }
+        .cover-slide .cover-brand .gold { color: var(--gold); }
+        .cover-slide .cover-tagline {
+            position: absolute;
+            bottom: 22px;
+            left: 0;
+            right: 0;
+            text-align: center;
+            font-size: 11px;
+            color: var(--gold);
+            font-weight: 600;
+            letter-spacing: 1.5px;
+        }
         .cover-slide .cover-corner-tl,
         .cover-slide .cover-corner-br {
             position: absolute;
-            width: 120px;
-            height: 120px;
-            border: 3px solid rgba(0,157,69,0.15);
+            width: 100px;
+            height: 100px;
+            border: 2px solid var(--gold);
+            opacity: 0.2;
         }
         .cover-slide .cover-corner-tl {
             top: 24px; left: 24px;
             border-right: none; border-bottom: none;
-            border-radius: 8px 0 0 0;
+            border-radius: 4px 0 0 0;
         }
         .cover-slide .cover-corner-br {
             bottom: 24px; right: 24px;
             border-left: none; border-top: none;
-            border-radius: 0 0 8px 0;
+            border-radius: 0 0 4px 0;
         }
 
         /* ---------- CARDS ---------- */
@@ -1084,23 +1105,22 @@ MD;
             flex: 1;
             min-width: 200px;
             background: var(--white);
-            border-radius: 10px;
+            border-radius: 6px;
             padding: 22px 24px;
-            box-shadow: 0 1px 8px rgba(9,18,99,0.06);
-            border: 1px solid rgba(9,18,99,0.04);
+            border: 1px solid rgba(0,0,0,0.08);
         }
         .card-label {
-            font-size: 11px;
-            font-weight: 700;
+            font-size: 10px;
+            font-weight: 800;
             text-transform: uppercase;
-            letter-spacing: 1.5px;
-            color: var(--green);
+            letter-spacing: 2px;
+            color: var(--gold);
             margin-bottom: 8px;
         }
         .card-value {
-            font-size: 16px;
-            font-weight: 600;
-            color: var(--navy);
+            font-size: 17px;
+            font-weight: 800;
+            color: var(--black);
             line-height: 1.4;
         }
         .card-desc {
@@ -1114,16 +1134,16 @@ MD;
         .two-col { display: flex; gap: 32px; height: 100%; }
         .col { flex: 1; }
         .col-header {
-            font-size: 14px;
-            font-weight: 700;
+            font-size: 13px;
+            font-weight: 800;
             text-transform: uppercase;
-            letter-spacing: 1.5px;
+            letter-spacing: 2px;
             margin-bottom: 18px;
             padding-bottom: 10px;
             border-bottom: 2px solid;
         }
-        .col-header.problem { color: #c0392b; border-color: #c0392b; }
-        .col-header.solution { color: var(--green); border-color: var(--green); }
+        .col-header.problem { color: var(--dark); border-color: var(--dark); }
+        .col-header.solution { color: var(--gold); border-color: var(--gold); }
 
         /* ---------- BULLET ITEMS ---------- */
         .bullet-list { list-style: none; padding: 0; }
@@ -1142,9 +1162,9 @@ MD;
             width: 8px;
             height: 8px;
             border-radius: 50%;
-            background: var(--navy);
+            background: var(--dark);
         }
-        .bullet-list.green li::before { background: var(--green); }
+        .bullet-list.gold li::before { background: var(--gold); }
         .bullet-list.red li::before { background: #c0392b; }
 
         .check-list { list-style: none; padding: 0; }
@@ -1161,7 +1181,7 @@ MD;
             top: 6px;
             width: 22px;
             height: 22px;
-            background: var(--green);
+            background: var(--gold);
             color: var(--white);
             border-radius: 50%;
             font-size: 12px;
@@ -1177,31 +1197,32 @@ MD;
             width: 100%;
             border-collapse: separate;
             border-spacing: 0;
-            border-radius: 10px;
+            border-radius: 6px;
             overflow: hidden;
-            box-shadow: 0 1px 8px rgba(9,18,99,0.06);
             font-size: 14px;
+            border: 1px solid rgba(0,0,0,0.08);
         }
         .data-table thead th {
-            background: var(--navy);
+            background: var(--dark-deep);
             color: var(--white);
             padding: 14px 18px;
             font-weight: 700;
             text-align: left;
-            font-size: 13px;
-            letter-spacing: 0.5px;
+            font-size: 12px;
+            letter-spacing: 0.8px;
+            text-transform: uppercase;
         }
         .data-table tbody td {
             padding: 12px 18px;
             background: var(--white);
-            border-bottom: 1px solid rgba(9,18,99,0.06);
+            border-bottom: 1px solid rgba(0,0,0,0.06);
             color: var(--text);
         }
         .data-table tbody tr:last-child td { border-bottom: none; }
         .data-table .row-highlight td {
-            background: var(--green-bg);
-            font-weight: 700;
-            color: var(--navy);
+            background: var(--gold-bg);
+            font-weight: 800;
+            color: var(--black);
         }
 
         /* ---------- PROGRESS BARS ---------- */
@@ -1216,7 +1237,7 @@ MD;
         }
         .progress-bar {
             height: 12px;
-            background: rgba(9,18,99,0.08);
+            background: rgba(0,0,0,0.06);
             border-radius: 6px;
             overflow: hidden;
         }
@@ -1225,51 +1246,49 @@ MD;
             border-radius: 6px;
             transition: width 0.6s ease;
         }
-        .progress-fill.navy { background: linear-gradient(90deg, var(--navy) 0%, var(--navy-light) 100%); }
-        .progress-fill.green { background: linear-gradient(90deg, var(--green) 0%, var(--green-light) 100%); }
+        .progress-fill.gold { background: linear-gradient(90deg, var(--gold) 0%, var(--gold-light) 100%); }
+        .progress-fill.dark { background: linear-gradient(90deg, var(--dark) 0%, #555555 100%); }
 
         /* ---------- METRIC CARDS ---------- */
         .metric-row { display: flex; gap: 16px; margin-bottom: 20px; }
         .metric-card {
             flex: 1;
-            background: var(--white);
-            border-radius: 10px;
+            background: var(--dark-deep);
+            border-radius: 6px;
             padding: 18px 20px;
             text-align: center;
-            box-shadow: 0 1px 8px rgba(9,18,99,0.06);
-            border-top: 3px solid var(--navy);
         }
-        .metric-card.accent { border-top-color: var(--green); }
+        .metric-card.accent { background: var(--dark); }
         .metric-number {
             font-size: 28px;
-            font-weight: 800;
-            color: var(--navy);
+            font-weight: 900;
+            color: var(--white);
             letter-spacing: -0.5px;
         }
-        .metric-card.accent .metric-number { color: var(--green); }
+        .metric-card.accent .metric-number { color: var(--gold-light); }
         .metric-label {
-            font-size: 11px;
-            font-weight: 600;
+            font-size: 10px;
+            font-weight: 700;
             text-transform: uppercase;
-            letter-spacing: 1px;
-            color: var(--text-light);
+            letter-spacing: 1.5px;
+            color: var(--gold);
             margin-top: 4px;
         }
 
         /* ---------- HIGHLIGHT BOX ---------- */
         .highlight-box {
-            background: linear-gradient(135deg, var(--navy) 0%, var(--navy-light) 100%);
+            background: var(--dark-deep);
             color: var(--white);
-            border-radius: 10px;
+            border-radius: 6px;
             padding: 24px 28px;
             margin-top: 16px;
         }
         .highlight-box .hb-title {
-            font-size: 13px;
-            font-weight: 700;
+            font-size: 10px;
+            font-weight: 800;
             text-transform: uppercase;
-            letter-spacing: 1.5px;
-            color: var(--green);
+            letter-spacing: 2px;
+            color: var(--gold);
             margin-bottom: 8px;
         }
         .highlight-box .hb-text {
@@ -1281,21 +1300,22 @@ MD;
 
         /* ---------- CLOSING SLIDE ---------- */
         .closing-slide {
-            background: linear-gradient(135deg, var(--navy) 0%, #0d1a7a 50%, #162090 100%);
-            color: var(--white);
+            background: var(--cream);
+            color: var(--black);
             justify-content: center;
             align-items: center;
             text-align: center;
         }
         .closing-slide .closing-title {
-            font-size: 36px;
-            font-weight: 800;
+            font-size: 38px;
+            font-weight: 900;
             margin-bottom: 10px;
-            letter-spacing: -0.5px;
+            letter-spacing: -0.8px;
+            color: var(--black);
         }
         .closing-slide .closing-sub {
             font-size: 17px;
-            color: rgba(255,255,255,0.7);
+            color: var(--text-light);
             margin-bottom: 32px;
             font-weight: 400;
         }
@@ -1307,9 +1327,9 @@ MD;
             margin-bottom: 32px;
         }
         .closing-slide .contact-item {
-            background: rgba(255,255,255,0.08);
-            border: 1px solid rgba(255,255,255,0.12);
-            border-radius: 10px;
+            background: var(--dark-deep);
+            border: none;
+            border-radius: 6px;
             padding: 16px 24px;
             min-width: 180px;
         }
@@ -1317,8 +1337,8 @@ MD;
             font-size: 10px;
             text-transform: uppercase;
             letter-spacing: 2px;
-            color: var(--green);
-            font-weight: 700;
+            color: var(--gold);
+            font-weight: 800;
             margin-bottom: 6px;
         }
         .closing-slide .contact-value {
@@ -1328,49 +1348,115 @@ MD;
         }
         .closing-slide .closing-brand {
             font-size: 13px;
-            color: rgba(255,255,255,0.4);
+            color: var(--text-light);
             font-weight: 600;
-            letter-spacing: 1px;
+            letter-spacing: 0.5px;
             margin-top: 20px;
         }
-        .closing-slide .closing-brand span { color: var(--green); }
+        .closing-slide .closing-brand .gold { color: var(--gold); }
 
         /* ---------- TAG PILL ---------- */
         .tag-pill {
             display: inline-block;
-            background: var(--green-bg);
-            color: var(--green);
-            font-size: 12px;
-            font-weight: 700;
-            padding: 4px 14px;
+            background: var(--gold-bg);
+            color: var(--gold);
+            font-size: 11px;
+            font-weight: 800;
+            padding: 5px 16px;
             border-radius: 20px;
             margin-bottom: 16px;
-            letter-spacing: 0.5px;
+            letter-spacing: 1px;
+            text-transform: uppercase;
         }
 
         /* ---------- SECTION NUMBER ---------- */
         .section-num {
-            font-size: 48px;
+            font-size: 56px;
             font-weight: 900;
-            color: rgba(9,18,99,0.06);
+            color: rgba(0,0,0,0.04);
             position: absolute;
             top: 36px;
             right: 56px;
             line-height: 1;
         }
 
+        /* ---------- BAR CHART (INFOGRAPHIC) ---------- */
+        .bar-chart {
+            display: flex;
+            align-items: flex-end;
+            gap: 20px;
+            height: 160px;
+            padding-top: 10px;
+        }
+        .bar-col {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            height: 100%;
+            justify-content: flex-end;
+        }
+        .bar-fill {
+            width: 100%;
+            max-width: 100px;
+            background: var(--dark-deep);
+            border-radius: 4px 4px 0 0;
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 30px;
+        }
+        .bar-fill.accent { background: var(--dark); }
+        .bar-value {
+            color: var(--gold-light);
+            font-size: 13px;
+            font-weight: 800;
+            letter-spacing: -0.3px;
+        }
+        .bar-label {
+            margin-top: 8px;
+            font-size: 11px;
+            font-weight: 700;
+            color: var(--text-light);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        /* ---------- FLOW ARROW ---------- */
+        .flow-row {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 12px;
+        }
+        .flow-arrow {
+            color: var(--gold);
+            font-size: 18px;
+            font-weight: 900;
+        }
+        .flow-box {
+            background: var(--dark-deep);
+            color: var(--white);
+            padding: 10px 18px;
+            border-radius: 4px;
+            font-size: 13px;
+            font-weight: 600;
+        }
+
         /* ---------- RESPONSIVE ---------- */
         @media (max-width: 1200px) {
-            .slide { width: 96vw; height: auto; min-height: 500px; padding: 36px 40px 36px; }
-            .cover-slide .cover-title { font-size: 34px; }
+            .slide { width: 96vw; height: auto; min-height: 500px; padding: 36px 40px 40px; }
+            .cover-slide .cover-title { font-size: 36px; }
         }
         @media (max-width: 768px) {
-            .slide { padding: 28px 24px 28px; }
+            .slide { padding: 28px 24px 32px; }
             .two-col { flex-direction: column; gap: 20px; }
             .card-grid { flex-direction: column; }
             .metric-row { flex-direction: column; }
+            .bar-chart { flex-direction: column; height: auto; }
             .cover-slide .cover-title { font-size: 28px; }
-            .slide-title { font-size: 24px; }
+            .slide-title { font-size: 28px; }
             .closing-slide .contact-grid { flex-direction: column; align-items: center; }
         }
         ';
@@ -1446,8 +1532,8 @@ MD;
     /* ------------------------------------------------------------------ */
     private function slide_footer($slide_num, $total = 10) {
         return '<div class="slide-footer">'
-            . '<span class="brand-mark">Powered by <span>48HoursReady</span>.com</span>'
-            . '<span>' . $slide_num . ' / ' . $total . '</span>'
+            . '<span class="brand-mark">Powered by <span class="gold">48HoursReady</span>.com</span>'
+            . '<span class="page-num">' . $slide_num . ' / ' . $total . '</span>'
             . '</div>';
     }
 
@@ -1467,7 +1553,8 @@ MD;
             $html .= '<div class="cover-industry">' . $location . '</div>';
         }
         $html .= '<div class="cover-meta">' . $date . '</div>';
-        $html .= '<div class="cover-brand">Powered by <span>48HoursReady</span>.com</div>';
+        $html .= '<div class="cover-brand">Powered by <span class="gold">48HoursReady</span>.com</div>';
+        $html .= '<div class="cover-tagline">Pitch Deck Ready. GPT Verified.</div>';
         $html .= '</div>';
         return $html;
     }
@@ -1511,7 +1598,7 @@ MD;
 
         $html .= '</div>'; // card-grid
 
-        $html .= '<div class="highlight-box" style="margin-top:24px;">';
+        $html .= '<div class="highlight-box" style="margin-top:20px;">';
         $html .= '<div class="hb-title">About the Business</div>';
         $html .= '<div class="hb-text">' . $desc . '</div>';
         $html .= '</div>';
@@ -1538,7 +1625,7 @@ MD;
         // Problem column
         $html .= '<div class="col">';
         $html .= '<div class="col-header problem">The Problem</div>';
-        $html .= '<ul class="bullet-list red">';
+        $html .= '<ul class="bullet-list">';
         $html .= '<li>Customers in the ' . $industry . ' sector face limited access to reliable, specialized solutions</li>';
         $html .= '<li>Existing providers deliver fragmented, one-size-fits-all service</li>';
         $html .= '<li>Current market options are often overpriced relative to value delivered</li>';
@@ -1580,7 +1667,7 @@ MD;
         $html .= '<div class="slide-subtitle">Who we serve and why they choose us</div>';
         $html .= '<div class="slide-body">';
 
-        $html .= '<div class="highlight-box" style="margin-bottom:24px;">';
+        $html .= '<div class="highlight-box" style="margin-bottom:20px;margin-top:0;">';
         $html .= '<div class="hb-title">Core Customer Profile</div>';
         $html .= '<div class="hb-text">' . $target . '</div>';
         $html .= '</div>';
@@ -1662,24 +1749,24 @@ MD;
         $html .= '<div class="slide-subtitle">What sets us apart in the marketplace</div>';
         $html .= '<div class="slide-body">';
 
-        $html .= '<div class="highlight-box" style="margin-bottom:24px;">';
+        $html .= '<div class="highlight-box" style="margin-bottom:20px;margin-top:0;">';
         $html .= '<div class="hb-title">Key Differentiator</div>';
         $html .= '<div class="hb-text">' . $advantage . '</div>';
         $html .= '</div>';
 
         $html .= '<div class="card-grid">';
 
-        $html .= '<div class="card" style="border-left:3px solid var(--green);">';
+        $html .= '<div class="card" style="border-left:3px solid var(--gold);">';
         $html .= '<div class="card-label">Customer Lifetime Value</div>';
         $html .= '<div class="card-value">Above Average</div>';
         $html .= '<div class="card-desc">Trust-based relationships drive higher retention and repeat business</div></div>';
 
-        $html .= '<div class="card" style="border-left:3px solid var(--green);">';
+        $html .= '<div class="card" style="border-left:3px solid var(--gold);">';
         $html .= '<div class="card-label">Brand Reputation</div>';
         $html .= '<div class="card-value">Growing Organically</div>';
         $html .= '<div class="card-desc">Quality-driven approach generates strong referral growth</div></div>';
 
-        $html .= '<div class="card" style="border-left:3px solid var(--green);">';
+        $html .= '<div class="card" style="border-left:3px solid var(--gold);">';
         $html .= '<div class="card-label">Market Position</div>';
         $html .= '<div class="card-value">Defensible</div>';
         $html .= '<div class="card-desc">Unique combination of expertise and service that competitors struggle to replicate</div></div>';
@@ -1705,7 +1792,7 @@ MD;
 
         // Left: Leadership
         $html .= '<div class="col">';
-        $html .= '<div class="col-header" style="color:var(--navy);border-color:var(--navy);">Leadership</div>';
+        $html .= '<div class="col-header" style="color:var(--dark);border-color:var(--dark);">Leadership</div>';
         $html .= '<div class="card" style="margin-bottom:16px;">';
         $html .= '<div class="card-label">Founder &amp; Lead</div>';
         $html .= '<div class="card-value">' . esc_html($row->owner_name) . '</div>';
@@ -1722,7 +1809,7 @@ MD;
 
         // Right: Operational Model
         $html .= '<div class="col">';
-        $html .= '<div class="col-header" style="color:var(--green);border-color:var(--green);">Operational Model</div>';
+        $html .= '<div class="col-header" style="color:var(--gold);border-color:var(--gold);">Operational Model</div>';
         $html .= '<ul class="check-list">';
         $html .= '<li>Lean overhead with scalable processes</li>';
         $html .= '<li>Data-informed decision making</li>';
@@ -1749,33 +1836,44 @@ MD;
 
         $f = function($n) { return '$' . number_format($n); };
 
+        // Calculate bar heights as percentage of max revenue (yr3)
+        $max_rev = max($yr1['revenue'], $yr2['revenue'], $yr3['revenue']);
+        $bar1_pct = round(($yr1['revenue'] / $max_rev) * 100);
+        $bar2_pct = round(($yr2['revenue'] / $max_rev) * 100);
+        $bar3_pct = 100;
+
         $html  = '<div class="slide">';
         $html .= '<span class="section-num">08</span>';
         $html .= '<div class="slide-title">Financial Projections</div>';
         $html .= '<div class="slide-subtitle">Three-year outlook based on current trajectory and growth plan</div>';
         $html .= '<div class="slide-body">';
 
-        // Metric cards for headline numbers
-        $html .= '<div class="metric-row">';
-        $html .= '<div class="metric-card"><div class="metric-number">' . $f($yr1['revenue']) . '</div>';
-        $html .= '<div class="metric-label">Year 1 Revenue</div></div>';
-        $html .= '<div class="metric-card"><div class="metric-number">' . $f($yr2['revenue']) . '</div>';
-        $html .= '<div class="metric-label">Year 2 Revenue</div></div>';
-        $html .= '<div class="metric-card accent"><div class="metric-number">' . $f($yr3['revenue']) . '</div>';
-        $html .= '<div class="metric-label">Year 3 Revenue</div></div>';
+        $html .= '<div class="two-col">';
+
+        // Left: Bar chart infographic
+        $html .= '<div class="col">';
+        $html .= '<div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:2px;color:var(--gold);margin-bottom:14px;">Revenue Growth</div>';
+        $html .= '<div class="bar-chart">';
+        $html .= '<div class="bar-col"><div class="bar-fill" style="height:' . $bar1_pct . '%;"><span class="bar-value">' . $f($yr1['revenue']) . '</span></div><div class="bar-label">Year 1</div></div>';
+        $html .= '<div class="bar-col"><div class="bar-fill" style="height:' . $bar2_pct . '%;"><span class="bar-value">' . $f($yr2['revenue']) . '</span></div><div class="bar-label">Year 2</div></div>';
+        $html .= '<div class="bar-col"><div class="bar-fill accent" style="height:' . $bar3_pct . '%;"><span class="bar-value">' . $f($yr3['revenue']) . '</span></div><div class="bar-label">Year 3</div></div>';
+        $html .= '</div>';
         $html .= '</div>';
 
-        // Table
+        // Right: Table
+        $html .= '<div class="col">';
         $html .= '<table class="data-table">';
         $html .= '<thead><tr><th>Metric</th><th>Year 1</th><th>Year 2</th><th>Year 3</th></tr></thead>';
         $html .= '<tbody>';
         $html .= '<tr><td>Revenue</td><td>' . $f($yr1['revenue']) . '</td><td>' . $f($yr2['revenue']) . '</td><td>' . $f($yr3['revenue']) . '</td></tr>';
-        $html .= '<tr><td>Cost of Goods Sold</td><td>' . $f($yr1['cogs']) . '</td><td>' . $f($yr2['cogs']) . '</td><td>' . $f($yr3['cogs']) . '</td></tr>';
+        $html .= '<tr><td>COGS</td><td>' . $f($yr1['cogs']) . '</td><td>' . $f($yr2['cogs']) . '</td><td>' . $f($yr3['cogs']) . '</td></tr>';
         $html .= '<tr><td>Gross Profit</td><td>' . $f($yr1['gross']) . '</td><td>' . $f($yr2['gross']) . '</td><td>' . $f($yr3['gross']) . '</td></tr>';
-        $html .= '<tr><td>Operating Expenses</td><td>' . $f($yr1['opex']) . '</td><td>' . $f($yr2['opex']) . '</td><td>' . $f($yr3['opex']) . '</td></tr>';
+        $html .= '<tr><td>OpEx</td><td>' . $f($yr1['opex']) . '</td><td>' . $f($yr2['opex']) . '</td><td>' . $f($yr3['opex']) . '</td></tr>';
         $html .= '<tr class="row-highlight"><td>Net Profit</td><td>' . $f($yr1['net']) . '</td><td>' . $f($yr2['net']) . '</td><td>' . $f($yr3['net']) . '</td></tr>';
         $html .= '</tbody></table>';
+        $html .= '</div>';
 
+        $html .= '</div>'; // two-col
         $html .= '</div>'; // slide-body
         $html .= $this->slide_footer(8);
         $html .= '</div>';
@@ -1791,7 +1889,7 @@ MD;
             $purpose = substr($purpose, 0, 217) . '...';
         }
 
-        $colors = ['navy', 'green', 'navy', 'green'];
+        $colors = ['gold', 'dark', 'gold', 'dark'];
         $i = 0;
 
         $html  = '<div class="slide">';
@@ -1802,10 +1900,10 @@ MD;
 
         $html .= '<div class="two-col">';
 
-        // Left: funding ask
+        // Left: funding ask - large bold number in dark box
         $html .= '<div class="col">';
-        $html .= '<div class="metric-card accent" style="margin-bottom:20px;">';
-        $html .= '<div class="metric-number">$' . number_format($funding_num) . '</div>';
+        $html .= '<div class="metric-card accent" style="margin-bottom:20px;padding:28px 20px;">';
+        $html .= '<div class="metric-number" style="font-size:36px;font-weight:900;">$' . number_format($funding_num) . '</div>';
         $html .= '<div class="metric-label">Funding Requested</div></div>';
 
         $html .= '<div class="card"><div class="card-label">Purpose</div>';
@@ -1814,7 +1912,7 @@ MD;
 
         // Right: allocation bars
         $html .= '<div class="col">';
-        $html .= '<div style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--navy);margin-bottom:18px;">Allocation Breakdown</div>';
+        $html .= '<div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:2px;color:var(--gold);margin-bottom:18px;">Allocation Breakdown</div>';
 
         foreach ($fund_alloc as $label => $pct) {
             $color = $colors[$i % count($colors)];
@@ -1842,8 +1940,8 @@ MD;
         $html .= '<div class="cover-corner-tl"></div>';
         $html .= '<div class="cover-corner-br"></div>';
 
-        $html .= '<div class="tag-pill" style="background:rgba(0,157,69,0.15);color:#00E676;">Next Steps</div>';
-        $html .= '<div class="closing-title">Let\'s Build Something Great Together</div>';
+        $html .= '<div class="tag-pill">Next Steps</div>';
+        $html .= '<div class="closing-title">Let\'s build the standard together.</div>';
         $html .= '<div class="closing-sub">' . esc_html($row->business_name) . ' is ready for the next chapter. We invite you to connect.</div>';
 
         $html .= '<div class="contact-grid">';
@@ -1870,7 +1968,7 @@ MD;
 
         $html .= '</div>'; // contact-grid
 
-        $html .= '<div class="closing-brand">Powered by <span>48HoursReady</span>.com &mdash; Learn. Structure. Earn.</div>';
+        $html .= '<div class="closing-brand">Powered by <span class="gold">48HoursReady</span>.com &mdash; Pitch Deck Ready. GPT Verified.</div>';
         $html .= '</div>';
         return $html;
     }
