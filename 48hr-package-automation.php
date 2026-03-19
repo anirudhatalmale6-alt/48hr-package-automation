@@ -797,84 +797,1081 @@ MD;
     }
 
     private function output_pdf_html($title, $markdown_content, $row) {
-        // Convert markdown to HTML
-        $html_content = $this->markdown_to_html($markdown_content);
+        // Determine document type from title
+        $is_business_plan = (stripos($title, 'Business Plan') !== false);
+        $doc_type = $is_business_plan ? 'Business Plan' : 'Executive Summary';
+        $date = date('F j, Y');
 
-        $html = '<!DOCTYPE html><html><head><meta charset="UTF-8">';
+        // Parse funding amount for financial projections
+        $funding_raw = preg_replace('/[^0-9]/', '', $row->funding_needed);
+        $funding_num = max(50000, intval($funding_raw));
+        if ($funding_num < 50000) $funding_num = 100000;
+
+        // Financial projection calculations
+        $base_revenue = $funding_num * 0.8;
+        if ($base_revenue < 50000) $base_revenue = 100000;
+        $fin = $this->calc_financial_projections($base_revenue);
+
+        // Funding allocation breakdown
+        $fund_alloc = $this->calc_funding_allocation($funding_num, $row->funding_purpose);
+
+        // Build the slides
+        $slides = [];
+        $slides[] = $this->slide_cover($row, $doc_type, $date);
+        $slides[] = $this->slide_company_overview($row);
+        $slides[] = $this->slide_problem_solution($row);
+        $slides[] = $this->slide_target_market($row);
+        $slides[] = $this->slide_revenue_model($row);
+        $slides[] = $this->slide_competitive_advantage($row);
+        $slides[] = $this->slide_team_operations($row);
+        $slides[] = $this->slide_financial_projections($fin);
+        $slides[] = $this->slide_funding($row, $funding_num, $fund_alloc);
+        $slides[] = $this->slide_next_steps($row, $doc_type);
+
+        $slides_html = implode("\n", $slides);
+        $total_slides = count($slides);
+
+        $html = '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">';
         $html .= '<title>' . esc_html($title) . '</title>';
-        $html .= '<style>
-            @media print {
-                body { margin: 0; padding: 20px 40px; }
-                .no-print { display: none; }
-            }
-            body {
-                font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
-                line-height: 1.6;
-                color: #333;
-                max-width: 800px;
-                margin: 0 auto;
-                padding: 40px;
-                background: #fff;
-            }
-            .header {
-                text-align: center;
-                border-bottom: 3px solid #091263;
-                padding-bottom: 20px;
-                margin-bottom: 30px;
-            }
-            .header h1 {
-                color: #091263;
-                font-size: 28px;
-                margin: 0;
-            }
-            .header .brand {
-                color: #009D45;
-                font-size: 14px;
-                margin-top: 5px;
-            }
-            .header .date {
-                color: #666;
-                font-size: 12px;
-            }
-            h2 { color: #091263; border-bottom: 1px solid #ddd; padding-bottom: 5px; }
-            h3 { color: #333; }
-            .content { margin-top: 20px; }
-            table { width: 100%; border-collapse: collapse; margin: 15px 0; }
-            th, td { border: 1px solid #ddd; padding: 8px 12px; text-align: left; }
-            th { background: #091263; color: #fff; }
-            .print-btn {
-                position: fixed; top: 20px; right: 20px;
-                background: #091263; color: #fff; border: none;
-                padding: 12px 24px; border-radius: 6px;
-                cursor: pointer; font-size: 16px;
-                z-index: 1000;
-            }
-            .print-btn:hover { background: #009D45; }
-            .footer {
-                margin-top: 40px;
-                text-align: center;
-                border-top: 2px solid #091263;
-                padding-top: 15px;
-                color: #666;
-                font-size: 12px;
-            }
-        </style></head><body>';
-        $html .= '<button class="print-btn no-print" onclick="window.print()">Save as PDF / Print</button>';
-        $html .= '<div class="header">';
-        $html .= '<h1>' . esc_html($title) . '</h1>';
-        $html .= '<div class="brand">Powered by 48HoursReady.com</div>';
-        $html .= '<div class="date">Generated: ' . date('F j, Y') . '</div>';
+        $html .= '<style>' . $this->pitch_deck_css() . '</style>';
+        $html .= '</head><body>';
+        $html .= '<button class="print-btn no-print" onclick="window.print()">';
+        $html .= '<span class="print-icon">&#9113;</span> Save as PDF / Print</button>';
+        $html .= '<div class="slide-nav no-print">';
+        $html .= '<span class="nav-label">' . esc_html($doc_type) . ' &mdash; ' . $total_slides . ' Slides</span>';
         $html .= '</div>';
-        $html .= '<div class="content">' . $html_content . '</div>';
-        $html .= '<div class="footer">';
-        $html .= '<p>Prepared for ' . esc_html($row->owner_name) . ' | ' . esc_html($row->business_name) . '</p>';
-        $html .= '<p>Powered by <strong>48HoursReady.com</strong> — Learn. Structure. Earn.</p>';
-        $html .= '</div>';
+        $html .= $slides_html;
         $html .= '</body></html>';
 
         header('Content-Type: text/html; charset=UTF-8');
         echo $html;
         exit;
+    }
+
+    /* ------------------------------------------------------------------ */
+    /*  PITCH DECK CSS                                                     */
+    /* ------------------------------------------------------------------ */
+    private function pitch_deck_css() {
+        return '
+        @import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap");
+
+        :root {
+            --cream: #F5F1EB;
+            --cream-dark: #EDE8E0;
+            --navy: #091263;
+            --navy-light: #1a2580;
+            --green: #009D45;
+            --green-light: #00C853;
+            --green-bg: rgba(0,157,69,0.08);
+            --dark: #1a1a2e;
+            --text: #2d2d3a;
+            --text-light: #6b6b7b;
+            --white: #ffffff;
+            --shadow: 0 2px 20px rgba(9,18,99,0.08);
+            --slide-w: 1120px;
+            --slide-h: 630px;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: #e8e4de;
+            color: var(--text);
+            line-height: 1.5;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* ---------- PRINT / PDF ---------- */
+        @page {
+            size: landscape;
+            margin: 0;
+        }
+        @media print {
+            body { background: none; }
+            .no-print { display: none !important; }
+            .slide {
+                width: 100vw !important;
+                height: 100vh !important;
+                max-width: none !important;
+                max-height: none !important;
+                margin: 0 !important;
+                border-radius: 0 !important;
+                box-shadow: none !important;
+                page-break-after: always;
+                page-break-inside: avoid;
+                overflow: hidden !important;
+            }
+            .slide:last-child { page-break-after: auto; }
+        }
+
+        /* ---------- SCREEN LAYOUT ---------- */
+        .slide {
+            width: var(--slide-w);
+            height: var(--slide-h);
+            max-width: 96vw;
+            margin: 40px auto;
+            background: var(--cream);
+            border-radius: 12px;
+            box-shadow: var(--shadow), 0 8px 40px rgba(0,0,0,0.10);
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            padding: 48px 60px 40px;
+        }
+
+        /* ---------- PRINT BUTTON ---------- */
+        .print-btn {
+            position: fixed;
+            top: 20px;
+            right: 24px;
+            background: linear-gradient(135deg, var(--navy) 0%, var(--navy-light) 100%);
+            color: var(--white);
+            border: none;
+            padding: 14px 28px;
+            border-radius: 50px;
+            cursor: pointer;
+            font-size: 15px;
+            font-weight: 600;
+            font-family: "Inter", sans-serif;
+            z-index: 9999;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            box-shadow: 0 4px 20px rgba(9,18,99,0.3);
+            transition: all 0.25s ease;
+            letter-spacing: 0.3px;
+        }
+        .print-btn:hover {
+            background: linear-gradient(135deg, var(--green) 0%, var(--green-light) 100%);
+            box-shadow: 0 4px 24px rgba(0,157,69,0.35);
+            transform: translateY(-1px);
+        }
+        .print-icon { font-size: 18px; }
+
+        .slide-nav {
+            position: fixed;
+            top: 20px;
+            left: 24px;
+            background: rgba(255,255,255,0.95);
+            backdrop-filter: blur(10px);
+            padding: 10px 20px;
+            border-radius: 50px;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--navy);
+            z-index: 9999;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+            letter-spacing: 0.3px;
+        }
+
+        /* ---------- SLIDE FOOTER ---------- */
+        .slide-footer {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 60px;
+            font-size: 11px;
+            color: var(--text-light);
+            border-top: 1px solid rgba(9,18,99,0.06);
+            background: rgba(255,255,255,0.3);
+        }
+        .slide-footer .brand-mark {
+            font-weight: 700;
+            color: var(--navy);
+            letter-spacing: 0.5px;
+        }
+        .slide-footer .brand-mark span { color: var(--green); }
+
+        /* ---------- TYPOGRAPHY ---------- */
+        .slide-title {
+            font-size: 32px;
+            font-weight: 800;
+            color: var(--navy);
+            margin-bottom: 6px;
+            letter-spacing: -0.5px;
+            line-height: 1.2;
+        }
+        .slide-subtitle {
+            font-size: 15px;
+            color: var(--text-light);
+            margin-bottom: 28px;
+            font-weight: 400;
+        }
+        .slide-body { flex: 1; overflow: hidden; }
+
+        /* ---------- COVER SLIDE ---------- */
+        .cover-slide {
+            background: linear-gradient(135deg, var(--navy) 0%, #0d1a7a 40%, #162090 100%);
+            color: var(--white);
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            padding: 60px;
+        }
+        .cover-slide .cover-accent {
+            width: 80px;
+            height: 4px;
+            background: var(--green);
+            margin: 0 auto 32px;
+            border-radius: 2px;
+        }
+        .cover-slide .cover-title {
+            font-size: 44px;
+            font-weight: 900;
+            letter-spacing: -1px;
+            line-height: 1.15;
+            margin-bottom: 12px;
+        }
+        .cover-slide .cover-type {
+            font-size: 18px;
+            font-weight: 600;
+            color: var(--green);
+            text-transform: uppercase;
+            letter-spacing: 4px;
+            margin-bottom: 8px;
+        }
+        .cover-slide .cover-industry {
+            font-size: 18px;
+            font-weight: 400;
+            color: rgba(255,255,255,0.7);
+            margin-bottom: 4px;
+        }
+        .cover-slide .cover-meta {
+            font-size: 14px;
+            color: rgba(255,255,255,0.5);
+            margin-top: 24px;
+        }
+        .cover-slide .cover-brand {
+            position: absolute;
+            bottom: 36px;
+            left: 0;
+            right: 0;
+            text-align: center;
+            font-size: 13px;
+            color: rgba(255,255,255,0.4);
+            font-weight: 600;
+            letter-spacing: 1px;
+        }
+        .cover-slide .cover-brand span { color: var(--green); }
+        .cover-slide .cover-corner-tl,
+        .cover-slide .cover-corner-br {
+            position: absolute;
+            width: 120px;
+            height: 120px;
+            border: 3px solid rgba(0,157,69,0.15);
+        }
+        .cover-slide .cover-corner-tl {
+            top: 24px; left: 24px;
+            border-right: none; border-bottom: none;
+            border-radius: 8px 0 0 0;
+        }
+        .cover-slide .cover-corner-br {
+            bottom: 24px; right: 24px;
+            border-left: none; border-top: none;
+            border-radius: 0 0 8px 0;
+        }
+
+        /* ---------- CARDS ---------- */
+        .card-grid { display: flex; gap: 20px; flex-wrap: wrap; }
+        .card {
+            flex: 1;
+            min-width: 200px;
+            background: var(--white);
+            border-radius: 10px;
+            padding: 22px 24px;
+            box-shadow: 0 1px 8px rgba(9,18,99,0.06);
+            border: 1px solid rgba(9,18,99,0.04);
+        }
+        .card-label {
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            color: var(--green);
+            margin-bottom: 8px;
+        }
+        .card-value {
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--navy);
+            line-height: 1.4;
+        }
+        .card-desc {
+            font-size: 13px;
+            color: var(--text-light);
+            margin-top: 6px;
+            line-height: 1.45;
+        }
+
+        /* ---------- TWO-COLUMN ---------- */
+        .two-col { display: flex; gap: 32px; height: 100%; }
+        .col { flex: 1; }
+        .col-header {
+            font-size: 14px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            margin-bottom: 18px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid;
+        }
+        .col-header.problem { color: #c0392b; border-color: #c0392b; }
+        .col-header.solution { color: var(--green); border-color: var(--green); }
+
+        /* ---------- BULLET ITEMS ---------- */
+        .bullet-list { list-style: none; padding: 0; }
+        .bullet-list li {
+            position: relative;
+            padding: 8px 0 8px 30px;
+            font-size: 14px;
+            line-height: 1.5;
+            color: var(--text);
+        }
+        .bullet-list li::before {
+            content: "";
+            position: absolute;
+            left: 0;
+            top: 14px;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--navy);
+        }
+        .bullet-list.green li::before { background: var(--green); }
+        .bullet-list.red li::before { background: #c0392b; }
+
+        .check-list { list-style: none; padding: 0; }
+        .check-list li {
+            position: relative;
+            padding: 7px 0 7px 32px;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+        .check-list li::before {
+            content: "\2713";
+            position: absolute;
+            left: 0;
+            top: 6px;
+            width: 22px;
+            height: 22px;
+            background: var(--green);
+            color: var(--white);
+            border-radius: 50%;
+            font-size: 12px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            line-height: 1;
+        }
+
+        /* ---------- DATA TABLE ---------- */
+        .data-table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 1px 8px rgba(9,18,99,0.06);
+            font-size: 14px;
+        }
+        .data-table thead th {
+            background: var(--navy);
+            color: var(--white);
+            padding: 14px 18px;
+            font-weight: 700;
+            text-align: left;
+            font-size: 13px;
+            letter-spacing: 0.5px;
+        }
+        .data-table tbody td {
+            padding: 12px 18px;
+            background: var(--white);
+            border-bottom: 1px solid rgba(9,18,99,0.06);
+            color: var(--text);
+        }
+        .data-table tbody tr:last-child td { border-bottom: none; }
+        .data-table .row-highlight td {
+            background: var(--green-bg);
+            font-weight: 700;
+            color: var(--navy);
+        }
+
+        /* ---------- PROGRESS BARS ---------- */
+        .progress-item { margin-bottom: 16px; }
+        .progress-label {
+            display: flex;
+            justify-content: space-between;
+            font-size: 13px;
+            font-weight: 600;
+            margin-bottom: 6px;
+            color: var(--text);
+        }
+        .progress-bar {
+            height: 12px;
+            background: rgba(9,18,99,0.08);
+            border-radius: 6px;
+            overflow: hidden;
+        }
+        .progress-fill {
+            height: 100%;
+            border-radius: 6px;
+            transition: width 0.6s ease;
+        }
+        .progress-fill.navy { background: linear-gradient(90deg, var(--navy) 0%, var(--navy-light) 100%); }
+        .progress-fill.green { background: linear-gradient(90deg, var(--green) 0%, var(--green-light) 100%); }
+
+        /* ---------- METRIC CARDS ---------- */
+        .metric-row { display: flex; gap: 16px; margin-bottom: 20px; }
+        .metric-card {
+            flex: 1;
+            background: var(--white);
+            border-radius: 10px;
+            padding: 18px 20px;
+            text-align: center;
+            box-shadow: 0 1px 8px rgba(9,18,99,0.06);
+            border-top: 3px solid var(--navy);
+        }
+        .metric-card.accent { border-top-color: var(--green); }
+        .metric-number {
+            font-size: 28px;
+            font-weight: 800;
+            color: var(--navy);
+            letter-spacing: -0.5px;
+        }
+        .metric-card.accent .metric-number { color: var(--green); }
+        .metric-label {
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--text-light);
+            margin-top: 4px;
+        }
+
+        /* ---------- HIGHLIGHT BOX ---------- */
+        .highlight-box {
+            background: linear-gradient(135deg, var(--navy) 0%, var(--navy-light) 100%);
+            color: var(--white);
+            border-radius: 10px;
+            padding: 24px 28px;
+            margin-top: 16px;
+        }
+        .highlight-box .hb-title {
+            font-size: 13px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            color: var(--green);
+            margin-bottom: 8px;
+        }
+        .highlight-box .hb-text {
+            font-size: 15px;
+            line-height: 1.6;
+            font-weight: 400;
+            color: rgba(255,255,255,0.9);
+        }
+
+        /* ---------- CLOSING SLIDE ---------- */
+        .closing-slide {
+            background: linear-gradient(135deg, var(--navy) 0%, #0d1a7a 50%, #162090 100%);
+            color: var(--white);
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+        }
+        .closing-slide .closing-title {
+            font-size: 36px;
+            font-weight: 800;
+            margin-bottom: 10px;
+            letter-spacing: -0.5px;
+        }
+        .closing-slide .closing-sub {
+            font-size: 17px;
+            color: rgba(255,255,255,0.7);
+            margin-bottom: 32px;
+            font-weight: 400;
+        }
+        .closing-slide .contact-grid {
+            display: flex;
+            gap: 20px;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin-bottom: 32px;
+        }
+        .closing-slide .contact-item {
+            background: rgba(255,255,255,0.08);
+            border: 1px solid rgba(255,255,255,0.12);
+            border-radius: 10px;
+            padding: 16px 24px;
+            min-width: 180px;
+        }
+        .closing-slide .contact-label {
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            color: var(--green);
+            font-weight: 700;
+            margin-bottom: 6px;
+        }
+        .closing-slide .contact-value {
+            font-size: 15px;
+            font-weight: 500;
+            color: var(--white);
+        }
+        .closing-slide .closing-brand {
+            font-size: 13px;
+            color: rgba(255,255,255,0.4);
+            font-weight: 600;
+            letter-spacing: 1px;
+            margin-top: 20px;
+        }
+        .closing-slide .closing-brand span { color: var(--green); }
+
+        /* ---------- TAG PILL ---------- */
+        .tag-pill {
+            display: inline-block;
+            background: var(--green-bg);
+            color: var(--green);
+            font-size: 12px;
+            font-weight: 700;
+            padding: 4px 14px;
+            border-radius: 20px;
+            margin-bottom: 16px;
+            letter-spacing: 0.5px;
+        }
+
+        /* ---------- SECTION NUMBER ---------- */
+        .section-num {
+            font-size: 48px;
+            font-weight: 900;
+            color: rgba(9,18,99,0.06);
+            position: absolute;
+            top: 36px;
+            right: 56px;
+            line-height: 1;
+        }
+
+        /* ---------- RESPONSIVE ---------- */
+        @media (max-width: 1200px) {
+            .slide { width: 96vw; height: auto; min-height: 500px; padding: 36px 40px 36px; }
+            .cover-slide .cover-title { font-size: 34px; }
+        }
+        @media (max-width: 768px) {
+            .slide { padding: 28px 24px 28px; }
+            .two-col { flex-direction: column; gap: 20px; }
+            .card-grid { flex-direction: column; }
+            .metric-row { flex-direction: column; }
+            .cover-slide .cover-title { font-size: 28px; }
+            .slide-title { font-size: 24px; }
+            .closing-slide .contact-grid { flex-direction: column; align-items: center; }
+        }
+        ';
+    }
+
+    /* ------------------------------------------------------------------ */
+    /*  FINANCIAL PROJECTION CALCULATOR                                    */
+    /* ------------------------------------------------------------------ */
+    private function calc_financial_projections($base_revenue) {
+        return [
+            'yr1' => [
+                'revenue'  => $base_revenue,
+                'cogs'     => $base_revenue * 0.45,
+                'gross'    => $base_revenue * 0.55,
+                'opex'     => $base_revenue * 0.40,
+                'net'      => $base_revenue * 0.15,
+            ],
+            'yr2' => [
+                'revenue'  => $base_revenue * 1.75,
+                'cogs'     => $base_revenue * 1.75 * 0.40,
+                'gross'    => $base_revenue * 1.75 * 0.60,
+                'opex'     => $base_revenue * 1.75 * 0.35,
+                'net'      => $base_revenue * 1.75 * 0.25,
+            ],
+            'yr3' => [
+                'revenue'  => $base_revenue * 2.8,
+                'cogs'     => $base_revenue * 2.8 * 0.37,
+                'gross'    => $base_revenue * 2.8 * 0.63,
+                'opex'     => $base_revenue * 2.8 * 0.30,
+                'net'      => $base_revenue * 2.8 * 0.33,
+            ],
+        ];
+    }
+
+    /* ------------------------------------------------------------------ */
+    /*  FUNDING ALLOCATION CALCULATOR                                      */
+    /* ------------------------------------------------------------------ */
+    private function calc_funding_allocation($funding_num, $funding_purpose) {
+        $purpose = strtolower($funding_purpose);
+        $alloc = [];
+
+        // Default sensible allocation
+        $alloc['Product Development']   = 30;
+        $alloc['Marketing & Sales']     = 25;
+        $alloc['Operations & Staffing'] = 25;
+        $alloc['Working Capital']       = 20;
+
+        // Adjust if keywords detected
+        if (strpos($purpose, 'market') !== false || strpos($purpose, 'advertis') !== false) {
+            $alloc['Marketing & Sales'] = 35;
+            $alloc['Product Development'] = 25;
+            $alloc['Operations & Staffing'] = 22;
+            $alloc['Working Capital'] = 18;
+        }
+        if (strpos($purpose, 'hire') !== false || strpos($purpose, 'staff') !== false || strpos($purpose, 'team') !== false) {
+            $alloc['Operations & Staffing'] = 35;
+            $alloc['Product Development'] = 25;
+            $alloc['Marketing & Sales'] = 22;
+            $alloc['Working Capital'] = 18;
+        }
+        if (strpos($purpose, 'equip') !== false || strpos($purpose, 'inventory') !== false) {
+            $alloc['Product Development'] = 40;
+            $alloc['Operations & Staffing'] = 20;
+            $alloc['Marketing & Sales'] = 22;
+            $alloc['Working Capital'] = 18;
+        }
+
+        return $alloc;
+    }
+
+    /* ------------------------------------------------------------------ */
+    /*  SLIDE FOOTER HELPER                                                */
+    /* ------------------------------------------------------------------ */
+    private function slide_footer($slide_num, $total = 10) {
+        return '<div class="slide-footer">'
+            . '<span class="brand-mark">Powered by <span>48HoursReady</span>.com</span>'
+            . '<span>' . $slide_num . ' / ' . $total . '</span>'
+            . '</div>';
+    }
+
+    /* ------------------------------------------------------------------ */
+    /*  SLIDE 1: COVER                                                     */
+    /* ------------------------------------------------------------------ */
+    private function slide_cover($row, $doc_type, $date) {
+        $location = !empty($row->location) ? esc_html($row->location) : '';
+        $html  = '<div class="slide cover-slide">';
+        $html .= '<div class="cover-corner-tl"></div>';
+        $html .= '<div class="cover-corner-br"></div>';
+        $html .= '<div class="cover-accent"></div>';
+        $html .= '<div class="cover-type">' . esc_html($doc_type) . '</div>';
+        $html .= '<div class="cover-title">' . esc_html($row->business_name) . '</div>';
+        $html .= '<div class="cover-industry">' . esc_html($row->industry) . '</div>';
+        if ($location) {
+            $html .= '<div class="cover-industry">' . $location . '</div>';
+        }
+        $html .= '<div class="cover-meta">' . $date . '</div>';
+        $html .= '<div class="cover-brand">Powered by <span>48HoursReady</span>.com</div>';
+        $html .= '</div>';
+        return $html;
+    }
+
+    /* ------------------------------------------------------------------ */
+    /*  SLIDE 2: COMPANY OVERVIEW                                          */
+    /* ------------------------------------------------------------------ */
+    private function slide_company_overview($row) {
+        $stage_map = [
+            'idea'        => 'Idea Stage',
+            'startup'     => 'Startup',
+            'growing'     => 'Growth Stage',
+            'established' => 'Established',
+        ];
+        $stage_label = isset($stage_map[$row->business_stage]) ? $stage_map[$row->business_stage] : ucfirst($row->business_stage);
+
+        $desc = esc_html($row->business_description);
+        // Truncate description if too long for slide
+        if (strlen($desc) > 380) {
+            $desc = substr($desc, 0, 377) . '...';
+        }
+
+        $html  = '<div class="slide">';
+        $html .= '<span class="section-num">02</span>';
+        $html .= '<div class="slide-title">Company Overview</div>';
+        $html .= '<div class="slide-subtitle">A snapshot of who we are and what we do</div>';
+        $html .= '<div class="slide-body">';
+        $html .= '<div class="card-grid">';
+
+        $html .= '<div class="card"><div class="card-label">Business Name</div>';
+        $html .= '<div class="card-value">' . esc_html($row->business_name) . '</div></div>';
+
+        $html .= '<div class="card"><div class="card-label">Industry</div>';
+        $html .= '<div class="card-value">' . esc_html($row->industry) . '</div></div>';
+
+        $html .= '<div class="card"><div class="card-label">Stage</div>';
+        $html .= '<div class="card-value">' . esc_html($stage_label) . '</div></div>';
+
+        $html .= '<div class="card"><div class="card-label">Team Size</div>';
+        $html .= '<div class="card-value">' . esc_html($row->num_employees) . ' employees</div></div>';
+
+        $html .= '</div>'; // card-grid
+
+        $html .= '<div class="highlight-box" style="margin-top:24px;">';
+        $html .= '<div class="hb-title">About the Business</div>';
+        $html .= '<div class="hb-text">' . $desc . '</div>';
+        $html .= '</div>';
+
+        $html .= '</div>'; // slide-body
+        $html .= $this->slide_footer(2);
+        $html .= '</div>';
+        return $html;
+    }
+
+    /* ------------------------------------------------------------------ */
+    /*  SLIDE 3: PROBLEM & SOLUTION                                        */
+    /* ------------------------------------------------------------------ */
+    private function slide_problem_solution($row) {
+        $industry = esc_html($row->industry);
+
+        $html  = '<div class="slide">';
+        $html .= '<span class="section-num">03</span>';
+        $html .= '<div class="slide-title">Problem &amp; Solution</div>';
+        $html .= '<div class="slide-subtitle">Identifying the gap and how we fill it</div>';
+        $html .= '<div class="slide-body">';
+        $html .= '<div class="two-col">';
+
+        // Problem column
+        $html .= '<div class="col">';
+        $html .= '<div class="col-header problem">The Problem</div>';
+        $html .= '<ul class="bullet-list red">';
+        $html .= '<li>Customers in the ' . $industry . ' sector face limited access to reliable, specialized solutions</li>';
+        $html .= '<li>Existing providers deliver fragmented, one-size-fits-all service</li>';
+        $html .= '<li>Current market options are often overpriced relative to value delivered</li>';
+        $html .= '<li>Slow response times and poor customer experience are the norm</li>';
+        $html .= '</ul>';
+        $html .= '</div>';
+
+        // Solution column
+        $html .= '<div class="col">';
+        $html .= '<div class="col-header solution">Our Solution</div>';
+        $html .= '<ul class="check-list">';
+        $html .= '<li>Deep ' . $industry . ' expertise combined with a customer-first approach</li>';
+        $html .= '<li>Tailored solutions designed for real-world customer needs</li>';
+        $html .= '<li>Competitive pricing with transparent, predictable costs</li>';
+        $html .= '<li>Fast, responsive service with dedicated support</li>';
+        $html .= '</ul>';
+        $html .= '</div>';
+
+        $html .= '</div>'; // two-col
+        $html .= '</div>'; // slide-body
+        $html .= $this->slide_footer(3);
+        $html .= '</div>';
+        return $html;
+    }
+
+    /* ------------------------------------------------------------------ */
+    /*  SLIDE 4: TARGET MARKET                                             */
+    /* ------------------------------------------------------------------ */
+    private function slide_target_market($row) {
+        $target = esc_html($row->target_market);
+        // Truncate if needed
+        if (strlen($target) > 200) {
+            $target = substr($target, 0, 197) . '...';
+        }
+
+        $html  = '<div class="slide">';
+        $html .= '<span class="section-num">04</span>';
+        $html .= '<div class="slide-title">Target Market</div>';
+        $html .= '<div class="slide-subtitle">Who we serve and why they choose us</div>';
+        $html .= '<div class="slide-body">';
+
+        $html .= '<div class="highlight-box" style="margin-bottom:24px;">';
+        $html .= '<div class="hb-title">Core Customer Profile</div>';
+        $html .= '<div class="hb-text">' . $target . '</div>';
+        $html .= '</div>';
+
+        $html .= '<div class="card-grid">';
+
+        $html .= '<div class="card"><div class="card-label">Primary Segment</div>';
+        $html .= '<div class="card-value">Core Customers</div>';
+        $html .= '<div class="card-desc">Customers with immediate, recurring needs who form the revenue backbone</div></div>';
+
+        $html .= '<div class="card"><div class="card-label">Secondary Segment</div>';
+        $html .= '<div class="card-value">Adjacent Markets</div>';
+        $html .= '<div class="card-desc">Related segments that benefit from the same solutions and expand reach</div></div>';
+
+        $html .= '<div class="card"><div class="card-label">Growth Segment</div>';
+        $html .= '<div class="card-value">Referral Pipeline</div>';
+        $html .= '<div class="card-desc">Broader audience converting over time through word-of-mouth and partnerships</div></div>';
+
+        $html .= '</div>'; // card-grid
+        $html .= '</div>'; // slide-body
+        $html .= $this->slide_footer(4);
+        $html .= '</div>';
+        return $html;
+    }
+
+    /* ------------------------------------------------------------------ */
+    /*  SLIDE 5: REVENUE MODEL                                             */
+    /* ------------------------------------------------------------------ */
+    private function slide_revenue_model($row) {
+        $revenue = esc_html($row->revenue_model);
+        if (strlen($revenue) > 280) {
+            $revenue = substr($revenue, 0, 277) . '...';
+        }
+
+        $html  = '<div class="slide">';
+        $html .= '<span class="section-num">05</span>';
+        $html .= '<div class="slide-title">Revenue Model</div>';
+        $html .= '<div class="slide-subtitle">How we generate and grow revenue</div>';
+        $html .= '<div class="slide-body">';
+
+        $html .= '<div class="card" style="margin-bottom:24px;">';
+        $html .= '<div class="card-label">Revenue Strategy</div>';
+        $html .= '<div class="card-value" style="font-size:15px;line-height:1.6;">' . $revenue . '</div>';
+        $html .= '</div>';
+
+        $html .= '<div class="card-grid">';
+
+        $html .= '<div class="card"><div class="card-label">Scalability</div>';
+        $html .= '<div class="card-value">High</div>';
+        $html .= '<div class="card-desc">Revenue model designed to scale with customer base growth while improving unit economics</div></div>';
+
+        $html .= '<div class="card"><div class="card-label">Cash Flow</div>';
+        $html .= '<div class="card-value">Predictable</div>';
+        $html .= '<div class="card-desc">Structured for consistent, recurring revenue streams enabling confident reinvestment</div></div>';
+
+        $html .= '<div class="card"><div class="card-label">Growth Effect</div>';
+        $html .= '<div class="card-value">Compounding</div>';
+        $html .= '<div class="card-desc">Expanding customer base drives improving margins and accelerating returns over time</div></div>';
+
+        $html .= '</div>'; // card-grid
+        $html .= '</div>'; // slide-body
+        $html .= $this->slide_footer(5);
+        $html .= '</div>';
+        return $html;
+    }
+
+    /* ------------------------------------------------------------------ */
+    /*  SLIDE 6: COMPETITIVE ADVANTAGE                                     */
+    /* ------------------------------------------------------------------ */
+    private function slide_competitive_advantage($row) {
+        $advantage = esc_html($row->competitive_advantage);
+        if (strlen($advantage) > 350) {
+            $advantage = substr($advantage, 0, 347) . '...';
+        }
+
+        $html  = '<div class="slide">';
+        $html .= '<span class="section-num">06</span>';
+        $html .= '<div class="slide-title">Competitive Advantage</div>';
+        $html .= '<div class="slide-subtitle">What sets us apart in the marketplace</div>';
+        $html .= '<div class="slide-body">';
+
+        $html .= '<div class="highlight-box" style="margin-bottom:24px;">';
+        $html .= '<div class="hb-title">Key Differentiator</div>';
+        $html .= '<div class="hb-text">' . $advantage . '</div>';
+        $html .= '</div>';
+
+        $html .= '<div class="card-grid">';
+
+        $html .= '<div class="card" style="border-left:3px solid var(--green);">';
+        $html .= '<div class="card-label">Customer Lifetime Value</div>';
+        $html .= '<div class="card-value">Above Average</div>';
+        $html .= '<div class="card-desc">Trust-based relationships drive higher retention and repeat business</div></div>';
+
+        $html .= '<div class="card" style="border-left:3px solid var(--green);">';
+        $html .= '<div class="card-label">Brand Reputation</div>';
+        $html .= '<div class="card-value">Growing Organically</div>';
+        $html .= '<div class="card-desc">Quality-driven approach generates strong referral growth</div></div>';
+
+        $html .= '<div class="card" style="border-left:3px solid var(--green);">';
+        $html .= '<div class="card-label">Market Position</div>';
+        $html .= '<div class="card-value">Defensible</div>';
+        $html .= '<div class="card-desc">Unique combination of expertise and service that competitors struggle to replicate</div></div>';
+
+        $html .= '</div>'; // card-grid
+        $html .= '</div>'; // slide-body
+        $html .= $this->slide_footer(6);
+        $html .= '</div>';
+        return $html;
+    }
+
+    /* ------------------------------------------------------------------ */
+    /*  SLIDE 7: TEAM & OPERATIONS                                         */
+    /* ------------------------------------------------------------------ */
+    private function slide_team_operations($row) {
+        $html  = '<div class="slide">';
+        $html .= '<span class="section-num">07</span>';
+        $html .= '<div class="slide-title">Team &amp; Operations</div>';
+        $html .= '<div class="slide-subtitle">The people and processes driving our success</div>';
+        $html .= '<div class="slide-body">';
+
+        $html .= '<div class="two-col">';
+
+        // Left: Leadership
+        $html .= '<div class="col">';
+        $html .= '<div class="col-header" style="color:var(--navy);border-color:var(--navy);">Leadership</div>';
+        $html .= '<div class="card" style="margin-bottom:16px;">';
+        $html .= '<div class="card-label">Founder &amp; Lead</div>';
+        $html .= '<div class="card-value">' . esc_html($row->owner_name) . '</div>';
+        $html .= '<div class="card-desc">Hands-on expertise and deep understanding of the ' . esc_html($row->industry) . ' market</div>';
+        $html .= '</div>';
+
+        $html .= '<div class="metric-row">';
+        $html .= '<div class="metric-card"><div class="metric-number">' . esc_html($row->num_employees) . '</div>';
+        $html .= '<div class="metric-label">Team Members</div></div>';
+        $html .= '<div class="metric-card accent"><div class="metric-number" style="font-size:22px;">' . esc_html($row->location) . '</div>';
+        $html .= '<div class="metric-label">Headquarters</div></div>';
+        $html .= '</div>';
+        $html .= '</div>';
+
+        // Right: Operational Model
+        $html .= '<div class="col">';
+        $html .= '<div class="col-header" style="color:var(--green);border-color:var(--green);">Operational Model</div>';
+        $html .= '<ul class="check-list">';
+        $html .= '<li>Lean overhead with scalable processes</li>';
+        $html .= '<li>Data-informed decision making</li>';
+        $html .= '<li>Continuous improvement &amp; feedback loops</li>';
+        $html .= '<li>Strategic partnerships to extend reach</li>';
+        $html .= '<li>Clear roles and accountability across all functions</li>';
+        $html .= '</ul>';
+        $html .= '</div>';
+
+        $html .= '</div>'; // two-col
+        $html .= '</div>'; // slide-body
+        $html .= $this->slide_footer(7);
+        $html .= '</div>';
+        return $html;
+    }
+
+    /* ------------------------------------------------------------------ */
+    /*  SLIDE 8: FINANCIAL PROJECTIONS                                     */
+    /* ------------------------------------------------------------------ */
+    private function slide_financial_projections($fin) {
+        $yr1 = $fin['yr1'];
+        $yr2 = $fin['yr2'];
+        $yr3 = $fin['yr3'];
+
+        $f = function($n) { return '$' . number_format($n); };
+
+        $html  = '<div class="slide">';
+        $html .= '<span class="section-num">08</span>';
+        $html .= '<div class="slide-title">Financial Projections</div>';
+        $html .= '<div class="slide-subtitle">Three-year outlook based on current trajectory and growth plan</div>';
+        $html .= '<div class="slide-body">';
+
+        // Metric cards for headline numbers
+        $html .= '<div class="metric-row">';
+        $html .= '<div class="metric-card"><div class="metric-number">' . $f($yr1['revenue']) . '</div>';
+        $html .= '<div class="metric-label">Year 1 Revenue</div></div>';
+        $html .= '<div class="metric-card"><div class="metric-number">' . $f($yr2['revenue']) . '</div>';
+        $html .= '<div class="metric-label">Year 2 Revenue</div></div>';
+        $html .= '<div class="metric-card accent"><div class="metric-number">' . $f($yr3['revenue']) . '</div>';
+        $html .= '<div class="metric-label">Year 3 Revenue</div></div>';
+        $html .= '</div>';
+
+        // Table
+        $html .= '<table class="data-table">';
+        $html .= '<thead><tr><th>Metric</th><th>Year 1</th><th>Year 2</th><th>Year 3</th></tr></thead>';
+        $html .= '<tbody>';
+        $html .= '<tr><td>Revenue</td><td>' . $f($yr1['revenue']) . '</td><td>' . $f($yr2['revenue']) . '</td><td>' . $f($yr3['revenue']) . '</td></tr>';
+        $html .= '<tr><td>Cost of Goods Sold</td><td>' . $f($yr1['cogs']) . '</td><td>' . $f($yr2['cogs']) . '</td><td>' . $f($yr3['cogs']) . '</td></tr>';
+        $html .= '<tr><td>Gross Profit</td><td>' . $f($yr1['gross']) . '</td><td>' . $f($yr2['gross']) . '</td><td>' . $f($yr3['gross']) . '</td></tr>';
+        $html .= '<tr><td>Operating Expenses</td><td>' . $f($yr1['opex']) . '</td><td>' . $f($yr2['opex']) . '</td><td>' . $f($yr3['opex']) . '</td></tr>';
+        $html .= '<tr class="row-highlight"><td>Net Profit</td><td>' . $f($yr1['net']) . '</td><td>' . $f($yr2['net']) . '</td><td>' . $f($yr3['net']) . '</td></tr>';
+        $html .= '</tbody></table>';
+
+        $html .= '</div>'; // slide-body
+        $html .= $this->slide_footer(8);
+        $html .= '</div>';
+        return $html;
+    }
+
+    /* ------------------------------------------------------------------ */
+    /*  SLIDE 9: FUNDING & USE OF FUNDS                                    */
+    /* ------------------------------------------------------------------ */
+    private function slide_funding($row, $funding_num, $fund_alloc) {
+        $purpose = esc_html($row->funding_purpose);
+        if (strlen($purpose) > 220) {
+            $purpose = substr($purpose, 0, 217) . '...';
+        }
+
+        $colors = ['navy', 'green', 'navy', 'green'];
+        $i = 0;
+
+        $html  = '<div class="slide">';
+        $html .= '<span class="section-num">09</span>';
+        $html .= '<div class="slide-title">Funding &amp; Use of Funds</div>';
+        $html .= '<div class="slide-subtitle">Investment required and strategic allocation plan</div>';
+        $html .= '<div class="slide-body">';
+
+        $html .= '<div class="two-col">';
+
+        // Left: funding ask
+        $html .= '<div class="col">';
+        $html .= '<div class="metric-card accent" style="margin-bottom:20px;">';
+        $html .= '<div class="metric-number">$' . number_format($funding_num) . '</div>';
+        $html .= '<div class="metric-label">Funding Requested</div></div>';
+
+        $html .= '<div class="card"><div class="card-label">Purpose</div>';
+        $html .= '<div class="card-desc" style="font-size:14px;color:var(--text);">' . $purpose . '</div></div>';
+        $html .= '</div>';
+
+        // Right: allocation bars
+        $html .= '<div class="col">';
+        $html .= '<div style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--navy);margin-bottom:18px;">Allocation Breakdown</div>';
+
+        foreach ($fund_alloc as $label => $pct) {
+            $color = $colors[$i % count($colors)];
+            $amount = number_format($funding_num * $pct / 100);
+            $html .= '<div class="progress-item">';
+            $html .= '<div class="progress-label"><span>' . esc_html($label) . '</span><span>' . $pct . '% ($' . $amount . ')</span></div>';
+            $html .= '<div class="progress-bar"><div class="progress-fill ' . $color . '" style="width:' . $pct . '%;"></div></div>';
+            $html .= '</div>';
+            $i++;
+        }
+
+        $html .= '</div>';
+        $html .= '</div>'; // two-col
+        $html .= '</div>'; // slide-body
+        $html .= $this->slide_footer(9);
+        $html .= '</div>';
+        return $html;
+    }
+
+    /* ------------------------------------------------------------------ */
+    /*  SLIDE 10: NEXT STEPS / CONTACT                                     */
+    /* ------------------------------------------------------------------ */
+    private function slide_next_steps($row, $doc_type) {
+        $html  = '<div class="slide closing-slide">';
+        $html .= '<div class="cover-corner-tl"></div>';
+        $html .= '<div class="cover-corner-br"></div>';
+
+        $html .= '<div class="tag-pill" style="background:rgba(0,157,69,0.15);color:#00E676;">Next Steps</div>';
+        $html .= '<div class="closing-title">Let\'s Build Something Great Together</div>';
+        $html .= '<div class="closing-sub">' . esc_html($row->business_name) . ' is ready for the next chapter. We invite you to connect.</div>';
+
+        $html .= '<div class="contact-grid">';
+
+        $html .= '<div class="contact-item">';
+        $html .= '<div class="contact-label">Contact</div>';
+        $html .= '<div class="contact-value">' . esc_html($row->owner_name) . '</div></div>';
+
+        $html .= '<div class="contact-item">';
+        $html .= '<div class="contact-label">Email</div>';
+        $html .= '<div class="contact-value">' . esc_html($row->email) . '</div></div>';
+
+        if (!empty($row->phone)) {
+            $html .= '<div class="contact-item">';
+            $html .= '<div class="contact-label">Phone</div>';
+            $html .= '<div class="contact-value">' . esc_html($row->phone) . '</div></div>';
+        }
+
+        if (!empty($row->website)) {
+            $html .= '<div class="contact-item">';
+            $html .= '<div class="contact-label">Website</div>';
+            $html .= '<div class="contact-value">' . esc_html($row->website) . '</div></div>';
+        }
+
+        $html .= '</div>'; // contact-grid
+
+        $html .= '<div class="closing-brand">Powered by <span>48HoursReady</span>.com &mdash; Learn. Structure. Earn.</div>';
+        $html .= '</div>';
+        return $html;
     }
 
     private function markdown_to_html($text) {
