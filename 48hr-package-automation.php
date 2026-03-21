@@ -153,11 +153,12 @@ class HR48_Package_Automation {
         }
 
         $params = $request->get_body_params();
+        $add_branding = !empty($params['add_branding']);
         $tag_first = !empty($params['tag_first_page']);
         $tag_last = !empty($params['tag_last_page']);
 
         try {
-            $output_path = $this->process_pdf_branding($file['tmp_name'], $tag_first, $tag_last);
+            $output_path = $this->process_pdf_branding($file['tmp_name'], $tag_first, $tag_last, $add_branding);
         } catch (\Throwable $e) {
             error_log('48HR REST Branding error: ' . $e->getMessage());
             return new \WP_REST_Response([
@@ -2662,6 +2663,10 @@ MD;
 
                     <div class="hr48-checkbox-row">
                         <label>
+                            <input type="checkbox" name="add_branding" value="1" checked id="hr48-add-branding" />
+                            Add "Powered by 48HoursReady.com" branding
+                        </label>
+                        <label>
                             <input type="checkbox" name="tag_first_page" value="1" checked />
                             Add tagline on first page
                         </label>
@@ -2670,6 +2675,7 @@ MD;
                             Add tagline on last page
                         </label>
                     </div>
+                    <p style="font-size:12px;color:#888;margin-top:4px;">Uncheck all to only remove the NotebookLM watermark.</p>
 
                     <button type="submit" class="hr48-btn" id="hr48-process-btn" disabled>
                         &#9654; Process PDF
@@ -2873,11 +2879,12 @@ MD;
             wp_send_json_error(['message' => 'File exceeds 50 MB limit.']);
         }
 
+        $add_branding = !empty($_POST['add_branding']);
         $tag_first = !empty($_POST['tag_first_page']);
         $tag_last = !empty($_POST['tag_last_page']);
 
         try {
-            $output_path = $this->process_pdf_branding($file['tmp_name'], $tag_first, $tag_last);
+            $output_path = $this->process_pdf_branding($file['tmp_name'], $tag_first, $tag_last, $add_branding);
         } catch (\Throwable $e) {
             error_log('48HR Branding Swap error: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine());
             wp_send_json_error(['message' => 'PDF processing failed: ' . $e->getMessage()]);
@@ -2917,24 +2924,24 @@ MD;
      * @param bool $tag_last Add tagline on last page.
      * @return string Path to processed PDF.
      */
-    private function process_pdf_branding($source_path, $tag_first = true, $tag_last = true) {
+    private function process_pdf_branding($source_path, $tag_first = true, $tag_last = true, $add_branding = true) {
         @set_time_limit(300);
 
         $gs_path = trim(shell_exec('which gs 2>/dev/null') ?: '');
 
         // Use pure Ghostscript approach (preserves all PDF content perfectly)
         if ($gs_path && is_executable($gs_path)) {
-            return $this->process_pdf_branding_gs($source_path, $gs_path, $tag_first, $tag_last);
+            return $this->process_pdf_branding_gs($source_path, $gs_path, $tag_first, $tag_last, $add_branding);
         }
 
         // Fallback to FPDI if Ghostscript not available
-        return $this->process_pdf_branding_fpdi($source_path, $tag_first, $tag_last);
+        return $this->process_pdf_branding_fpdi($source_path, $tag_first, $tag_last, $add_branding);
     }
 
     /**
      * Pure Ghostscript branding: preserves 100% of original PDF content.
      */
-    private function process_pdf_branding_gs($source_path, $gs_path, $tag_first, $tag_last) {
+    private function process_pdf_branding_gs($source_path, $gs_path, $tag_first, $tag_last, $add_branding = true) {
         $output = tempnam(sys_get_temp_dir(), 'hr48_branded_');
 
         // Get page count for tagline logic
@@ -2947,10 +2954,8 @@ MD;
 
         // Build PostScript EndPage procedure for branding overlay
         // Coordinates in points (1pt = 1/72 inch ≈ 0.353mm)
-        // Branding at ~10mm (28pt) from bottom, cream cover at bottom-right
         $tagline_ps = '';
-        if ($tag_first || $tag_last) {
-            // Track page number for first/last tagline
+        if (($tag_first || $tag_last) && $add_branding) {
             $tagline_ps = sprintf(
                 '/hr48page 0 def '
                 . '/hr48total %d def ',
@@ -2964,43 +2969,42 @@ MD;
             . 'pop gsave '
             . 'currentpagedevice /PageSize get aload pop '
             . '/pH exch def /pW exch def '
-            // Cover NotebookLM watermark (cream rectangle, bottom-right)
+            // Always cover NotebookLM watermark (cream rectangle, bottom-right)
             . '0.941 0.925 0.890 setrgbcolor '
-            . 'pW 164 sub 8 156 34 rectfill '
-            // Calculate branding text width
-            . '/Helvetica findfont 9 scalefont setfont '
-            . '(Powered by ) stringwidth pop '
-            . '(48HoursReady) stringwidth pop add '
-            . '(.com) stringwidth pop add '
-            . '/tw exch def '
-            // Position: centered, 28pt from bottom
-            . 'pW tw sub 2 div 28 moveto '
-            // "Powered by " in dark
-            . '0.176 0.176 0.176 setrgbcolor '
-            . '(Powered by ) show '
-            // "48HoursReady" in gold
-            . '0.722 0.592 0.353 setrgbcolor '
-            . '(48HoursReady) show '
-            // ".com" in dark
-            . '0.176 0.176 0.176 setrgbcolor '
-            . '(.com) show ';
+            . 'pW 164 sub 8 156 34 rectfill ';
 
-        // Add tagline on first/last page
-        if ($tag_first || $tag_last) {
-            $ps_code .= '/hr48page hr48page 1 add def ';
-            $conditions = [];
-            if ($tag_first) $conditions[] = 'hr48page 1 eq';
-            if ($tag_last) $conditions[] = 'hr48page hr48total eq';
-            $condition = implode(' ', $conditions);
-            if (count($conditions) > 1) $condition .= ' or';
-
-            $ps_code .= $condition . ' { '
-                . '/Helvetica-Oblique findfont 7 scalefont setfont '
+        // Only add branding text if requested
+        if ($add_branding) {
+            $ps_code .= '/Helvetica findfont 9 scalefont setfont '
+                . '(Powered by ) stringwidth pop '
+                . '(48HoursReady) stringwidth pop add '
+                . '(.com) stringwidth pop add '
+                . '/tw exch def '
+                . 'pW tw sub 2 div 28 moveto '
+                . '0.176 0.176 0.176 setrgbcolor '
+                . '(Powered by ) show '
                 . '0.722 0.592 0.353 setrgbcolor '
-                . '(Pitch Deck Ready. GPT Verified.) dup stringwidth pop '
-                . '/tagw exch def '
-                . 'pW tagw sub 2 div 16 moveto show '
-                . '} if ';
+                . '(48HoursReady) show '
+                . '0.176 0.176 0.176 setrgbcolor '
+                . '(.com) show ';
+
+            // Add tagline on first/last page
+            if ($tag_first || $tag_last) {
+                $ps_code .= '/hr48page hr48page 1 add def ';
+                $conditions = [];
+                if ($tag_first) $conditions[] = 'hr48page 1 eq';
+                if ($tag_last) $conditions[] = 'hr48page hr48total eq';
+                $condition = implode(' ', $conditions);
+                if (count($conditions) > 1) $condition .= ' or';
+
+                $ps_code .= $condition . ' { '
+                    . '/Helvetica-Oblique findfont 7 scalefont setfont '
+                    . '0.722 0.592 0.353 setrgbcolor '
+                    . '(Pitch Deck Ready. GPT Verified.) dup stringwidth pop '
+                    . '/tagw exch def '
+                    . 'pW tagw sub 2 div 16 moveto show '
+                    . '} if ';
+            }
         }
 
         $ps_code .= 'grestore true '
@@ -3036,7 +3040,7 @@ MD;
     /**
      * FPDI-based branding fallback (for servers without Ghostscript).
      */
-    private function process_pdf_branding_fpdi($source_path, $tag_first = true, $tag_last = true) {
+    private function process_pdf_branding_fpdi($source_path, $tag_first = true, $tag_last = true, $add_branding = true) {
         $pdf = new \setasign\Fpdi\Fpdi();
 
         $page_count = $pdf->setSourceFile($source_path);
@@ -3056,31 +3060,33 @@ MD;
             $pdf->SetFillColor(240, 236, 227);
             $pdf->Rect($w - 58, $h - 15, 55, 12, 'F');
 
-            // Branding text
-            $pdf->SetFont('Helvetica', '', 9);
-            $powered_text = 'Powered by ';
-            $brand_text = '48HoursReady';
-            $dot_text = '.com';
-            $total_w = $pdf->GetStringWidth($powered_text) + $pdf->GetStringWidth($brand_text) + $pdf->GetStringWidth($dot_text);
-            $start_x = ($w - $total_w) / 2;
-            $brand_y = $h - 10;
+            if ($add_branding) {
+                // Branding text
+                $pdf->SetFont('Helvetica', '', 9);
+                $powered_text = 'Powered by ';
+                $brand_text = '48HoursReady';
+                $dot_text = '.com';
+                $total_w = $pdf->GetStringWidth($powered_text) + $pdf->GetStringWidth($brand_text) + $pdf->GetStringWidth($dot_text);
+                $start_x = ($w - $total_w) / 2;
+                $brand_y = $h - 10;
 
-            $pdf->SetTextColor(45, 45, 45);
-            $pdf->SetXY($start_x, $brand_y);
-            $pdf->Cell($pdf->GetStringWidth($powered_text), 5, $powered_text, 0, 0, 'L');
-            $pdf->SetTextColor(184, 151, 90);
-            $pdf->Cell($pdf->GetStringWidth($brand_text), 5, $brand_text, 0, 0, 'L');
-            $pdf->SetTextColor(45, 45, 45);
-            $pdf->Cell($pdf->GetStringWidth($dot_text), 5, $dot_text, 0, 0, 'L');
-
-            // Tagline on first/last page
-            if (($i === 1 && $tag_first) || ($i === $page_count && $tag_last)) {
-                $pdf->SetFont('Helvetica', 'I', 7);
+                $pdf->SetTextColor(45, 45, 45);
+                $pdf->SetXY($start_x, $brand_y);
+                $pdf->Cell($pdf->GetStringWidth($powered_text), 5, $powered_text, 0, 0, 'L');
                 $pdf->SetTextColor(184, 151, 90);
-                $tagline = 'Pitch Deck Ready. GPT Verified.';
-                $tag_w = $pdf->GetStringWidth($tagline);
-                $pdf->SetXY(($w - $tag_w) / 2, $brand_y + 4.5);
-                $pdf->Cell($tag_w, 4, $tagline, 0, 0, 'L');
+                $pdf->Cell($pdf->GetStringWidth($brand_text), 5, $brand_text, 0, 0, 'L');
+                $pdf->SetTextColor(45, 45, 45);
+                $pdf->Cell($pdf->GetStringWidth($dot_text), 5, $dot_text, 0, 0, 'L');
+
+                // Tagline on first/last page
+                if (($i === 1 && $tag_first) || ($i === $page_count && $tag_last)) {
+                    $pdf->SetFont('Helvetica', 'I', 7);
+                    $pdf->SetTextColor(184, 151, 90);
+                    $tagline = 'Pitch Deck Ready. GPT Verified.';
+                    $tag_w = $pdf->GetStringWidth($tagline);
+                    $pdf->SetXY(($w - $tag_w) / 2, $brand_y + 4.5);
+                    $pdf->Cell($tag_w, 4, $tagline, 0, 0, 'L');
+                }
             }
         }
 
