@@ -2796,6 +2796,7 @@ MD;
         $out_name = 'branded-' . sanitize_file_name(pathinfo($file['name'], PATHINFO_FILENAME)) . '-' . time() . '.pdf';
         $dest = $branded_dir . $out_name;
         rename($output_path, $dest);
+        chmod($dest, 0644); // Ensure web server can serve the file
 
         $url = $upload_dir['baseurl'] . '/hr48-branded/' . $out_name;
 
