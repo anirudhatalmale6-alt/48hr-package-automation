@@ -2838,31 +2838,123 @@ MD;
     private function process_pdf_branding($source_path, $tag_first = true, $tag_last = true) {
         @set_time_limit(300);
 
-        // Pre-convert PDF with Ghostscript for full compatibility (handles PDF 1.5+, complex objects)
-        $gs_converted = null;
         $gs_path = trim(shell_exec('which gs 2>/dev/null') ?: '');
+
+        // Use pure Ghostscript approach (preserves all PDF content perfectly)
         if ($gs_path && is_executable($gs_path)) {
-            $gs_converted = tempnam(sys_get_temp_dir(), 'hr48_gs_');
-            $cmd = sprintf(
-                '%s -sDEVICE=pdfwrite -dCompatibilityLevel=1.4 -dNOPAUSE -dBATCH -dQUIET '
-                . '-dPrinted=false -dPDFSETTINGS=/prepress '
-                . '-dColorImageDownsampleType=/Bicubic -dColorImageResolution=300 '
-                . '-dGrayImageDownsampleType=/Bicubic -dGrayImageResolution=300 '
-                . '-sOutputFile=%s %s 2>&1',
-                escapeshellarg($gs_path),
-                escapeshellarg($gs_converted),
-                escapeshellarg($source_path)
-            );
-            $gs_output = shell_exec($cmd);
-            if (file_exists($gs_converted) && filesize($gs_converted) > 0) {
-                $source_path = $gs_converted;
-            } else {
-                error_log('48HR Branding: GS conversion failed: ' . ($gs_output ?: 'empty output'));
-                @unlink($gs_converted);
-                $gs_converted = null;
-            }
+            return $this->process_pdf_branding_gs($source_path, $gs_path, $tag_first, $tag_last);
         }
 
+        // Fallback to FPDI if Ghostscript not available
+        return $this->process_pdf_branding_fpdi($source_path, $tag_first, $tag_last);
+    }
+
+    /**
+     * Pure Ghostscript branding: preserves 100% of original PDF content.
+     */
+    private function process_pdf_branding_gs($source_path, $gs_path, $tag_first, $tag_last) {
+        $output = tempnam(sys_get_temp_dir(), 'hr48_branded_');
+
+        // Get page count for tagline logic
+        $count_cmd = sprintf(
+            '%s -q -dNODISPLAY -dNOSAFER -c "(%s) (r) file runpdfbegin pdfpagecount = quit" 2>&1',
+            escapeshellarg($gs_path),
+            str_replace(['(', ')'], ['\\(', '\\)'], $source_path)
+        );
+        $page_count = (int) trim(shell_exec($count_cmd));
+
+        // Build PostScript EndPage procedure for branding overlay
+        // Coordinates in points (1pt = 1/72 inch ≈ 0.353mm)
+        // Branding at ~10mm (28pt) from bottom, cream cover at bottom-right
+        $tagline_ps = '';
+        if ($tag_first || $tag_last) {
+            // Track page number for first/last tagline
+            $tagline_ps = sprintf(
+                '/hr48page 0 def '
+                . '/hr48total %d def ',
+                $page_count
+            );
+        }
+
+        $ps_code = $tagline_ps
+            . '<< /EndPage { '
+            . 'exch pop dup 0 eq { '
+            . 'pop gsave '
+            . 'currentpagedevice /PageSize get aload pop '
+            . '/pH exch def /pW exch def '
+            // Cover NotebookLM watermark (cream rectangle, bottom-right)
+            . '0.941 0.925 0.890 setrgbcolor '
+            . 'pW 164 sub 8 156 34 rectfill '
+            // Calculate branding text width
+            . '/Helvetica findfont 9 scalefont setfont '
+            . '(Powered by ) stringwidth pop '
+            . '(48HoursReady) stringwidth pop add '
+            . '(.com) stringwidth pop add '
+            . '/tw exch def '
+            // Position: centered, 28pt from bottom
+            . 'pW tw sub 2 div 28 moveto '
+            // "Powered by " in dark
+            . '0.176 0.176 0.176 setrgbcolor '
+            . '(Powered by ) show '
+            // "48HoursReady" in gold
+            . '0.722 0.592 0.353 setrgbcolor '
+            . '(48HoursReady) show '
+            // ".com" in dark
+            . '0.176 0.176 0.176 setrgbcolor '
+            . '(.com) show ';
+
+        // Add tagline on first/last page
+        if ($tag_first || $tag_last) {
+            $ps_code .= '/hr48page hr48page 1 add def ';
+            $conditions = [];
+            if ($tag_first) $conditions[] = 'hr48page 1 eq';
+            if ($tag_last) $conditions[] = 'hr48page hr48total eq';
+            $condition = implode(' ', $conditions);
+            if (count($conditions) > 1) $condition .= ' or';
+
+            $ps_code .= $condition . ' { '
+                . '/Helvetica-Oblique findfont 7 scalefont setfont '
+                . '0.722 0.592 0.353 setrgbcolor '
+                . '(Pitch Deck Ready. GPT Verified.) dup stringwidth pop '
+                . '/tagw exch def '
+                . 'pW tagw sub 2 div 16 moveto show '
+                . '} if ';
+        }
+
+        $ps_code .= 'grestore true '
+            . '} { '
+            . '2 ne '
+            . '} ifelse '
+            . '} >> setpagedevice';
+
+        $cmd = sprintf(
+            '%s -sDEVICE=pdfwrite -dCompatibilityLevel=1.4 -dNOPAUSE -dBATCH -dQUIET '
+            . '-dPDFSETTINGS=/prepress '
+            . '-dColorImageDownsampleType=/Bicubic -dColorImageResolution=300 '
+            . '-dGrayImageDownsampleType=/Bicubic -dGrayImageResolution=300 '
+            . '-sOutputFile=%s -c %s -f %s 2>&1',
+            escapeshellarg($gs_path),
+            escapeshellarg($output),
+            escapeshellarg($ps_code),
+            escapeshellarg($source_path)
+        );
+
+        $gs_output = shell_exec($cmd);
+
+        if (!file_exists($output) || filesize($output) === 0) {
+            error_log('48HR Branding GS: failed. Output: ' . ($gs_output ?: 'empty'));
+            @unlink($output);
+            // Fall back to FPDI
+            return $this->process_pdf_branding_fpdi($source_path, $tag_first, $tag_last);
+        }
+
+        return $output;
+    }
+
+    /**
+     * FPDI-based branding fallback (for servers without Ghostscript).
+     */
+    private function process_pdf_branding_fpdi($source_path, $tag_first = true, $tag_last = true) {
         $pdf = new \setasign\Fpdi\Fpdi();
 
         $page_count = $pdf->setSourceFile($source_path);
@@ -2871,7 +2963,6 @@ MD;
             $tpl_id = $pdf->importPage($i);
             $size = $pdf->getTemplateSize($tpl_id);
 
-            // Detect orientation from page dimensions
             $w = $size['width'];
             $h = $size['height'];
             $orientation = ($w > $h) ? 'L' : 'P';
@@ -2879,69 +2970,40 @@ MD;
             $pdf->AddPage($orientation, [$w, $h]);
             $pdf->useTemplate($tpl_id, 0, 0, $w, $h);
 
-            // ---- Cover the NotebookLM watermark (bottom-right corner) ----
-            // NotebookLM places its icon + text in the bottom-right on cream background
-            // We draw a cream rectangle over that area
-            $cover_w = 55; // mm width of the cover rectangle
-            $cover_h = 12; // mm height
-            $cover_x = $w - $cover_w - 3; // 3mm from right edge
-            $cover_y = $h - $cover_h - 3; // 3mm from bottom edge
-
-            // Set fill color to cream (#F0ECE3 = RGB 240, 236, 227)
+            // Cover NotebookLM watermark
             $pdf->SetFillColor(240, 236, 227);
-            $pdf->Rect($cover_x, $cover_y, $cover_w, $cover_h, 'F');
+            $pdf->Rect($w - 58, $h - 15, 55, 12, 'F');
 
-            // ---- Add "Powered by 48HoursReady.com" centered at bottom ----
-            $brand_y = $h - 10; // 10mm from bottom
-
-            // "Powered by " in black
+            // Branding text
             $pdf->SetFont('Helvetica', '', 9);
             $powered_text = 'Powered by ';
             $brand_text = '48HoursReady';
             $dot_text = '.com';
-
-            $powered_w = $pdf->GetStringWidth($powered_text);
-            $brand_w = $pdf->GetStringWidth($brand_text);
-            $dot_w = $pdf->GetStringWidth($dot_text);
-            $total_w = $powered_w + $brand_w + $dot_w;
+            $total_w = $pdf->GetStringWidth($powered_text) + $pdf->GetStringWidth($brand_text) + $pdf->GetStringWidth($dot_text);
             $start_x = ($w - $total_w) / 2;
+            $brand_y = $h - 10;
 
-            // "Powered by " in dark (#2D2D2D)
             $pdf->SetTextColor(45, 45, 45);
             $pdf->SetXY($start_x, $brand_y);
-            $pdf->Cell($powered_w, 5, $powered_text, 0, 0, 'L');
-
-            // "48HoursReady" in gold (#B8975A)
+            $pdf->Cell($pdf->GetStringWidth($powered_text), 5, $powered_text, 0, 0, 'L');
             $pdf->SetTextColor(184, 151, 90);
-            $pdf->Cell($brand_w, 5, $brand_text, 0, 0, 'L');
-
-            // ".com" in dark
+            $pdf->Cell($pdf->GetStringWidth($brand_text), 5, $brand_text, 0, 0, 'L');
             $pdf->SetTextColor(45, 45, 45);
-            $pdf->Cell($dot_w, 5, $dot_text, 0, 0, 'L');
+            $pdf->Cell($pdf->GetStringWidth($dot_text), 5, $dot_text, 0, 0, 'L');
 
-            // ---- Add tagline on first/last page ----
-            $is_first = ($i === 1);
-            $is_last = ($i === $page_count);
-            if (($is_first && $tag_first) || ($is_last && $tag_last)) {
-                $tagline = 'Pitch Deck Ready. GPT Verified.';
+            // Tagline on first/last page
+            if (($i === 1 && $tag_first) || ($i === $page_count && $tag_last)) {
                 $pdf->SetFont('Helvetica', 'I', 7);
                 $pdf->SetTextColor(184, 151, 90);
+                $tagline = 'Pitch Deck Ready. GPT Verified.';
                 $tag_w = $pdf->GetStringWidth($tagline);
-                $tag_x = ($w - $tag_w) / 2;
-                $pdf->SetXY($tag_x, $brand_y + 4.5);
+                $pdf->SetXY(($w - $tag_w) / 2, $brand_y + 4.5);
                 $pdf->Cell($tag_w, 4, $tagline, 0, 0, 'L');
             }
         }
 
-        // Save to temp file
         $tmp = tempnam(sys_get_temp_dir(), 'hr48_branded_');
         $pdf->Output('F', $tmp);
-
-        // Clean up GS temp file if it was created
-        if ($gs_converted) {
-            @unlink($gs_converted);
-        }
-
         return $tmp;
     }
 
