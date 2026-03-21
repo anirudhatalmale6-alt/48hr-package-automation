@@ -112,6 +112,88 @@ class HR48_Package_Automation {
                 return current_user_can('manage_options');
             }
         ]);
+
+        // REST endpoint for PDF branding swap (more reliable than admin-ajax)
+        register_rest_route('hr48-auto/v1', '/brand-pdf', [
+            'methods' => 'POST',
+            'callback' => [$this, 'rest_process_pdf_branding'],
+            'permission_callback' => function() {
+                return current_user_can('manage_options');
+            }
+        ]);
+    }
+
+    /**
+     * REST API handler for PDF branding swap.
+     */
+    public function rest_process_pdf_branding(\WP_REST_Request $request) {
+        $files = $request->get_file_params();
+
+        if (empty($files['pdf_file']) || $files['pdf_file']['error'] !== UPLOAD_ERR_OK) {
+            return new \WP_REST_Response([
+                'success' => false,
+                'data' => ['message' => 'No PDF file uploaded or upload error (code: ' . ($files['pdf_file']['error'] ?? 'none') . ').']
+            ], 400);
+        }
+
+        $file = $files['pdf_file'];
+        $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+        if ($ext !== 'pdf') {
+            return new \WP_REST_Response([
+                'success' => false,
+                'data' => ['message' => 'Only PDF files are accepted.']
+            ], 400);
+        }
+
+        if ($file['size'] > 50 * 1024 * 1024) {
+            return new \WP_REST_Response([
+                'success' => false,
+                'data' => ['message' => 'File exceeds 50 MB limit.']
+            ], 400);
+        }
+
+        $params = $request->get_body_params();
+        $tag_first = !empty($params['tag_first_page']);
+        $tag_last = !empty($params['tag_last_page']);
+
+        try {
+            $output_path = $this->process_pdf_branding($file['tmp_name'], $tag_first, $tag_last);
+        } catch (\Throwable $e) {
+            error_log('48HR REST Branding error: ' . $e->getMessage());
+            return new \WP_REST_Response([
+                'success' => false,
+                'data' => ['message' => 'PDF processing failed: ' . $e->getMessage()]
+            ], 500);
+        }
+
+        if (!$output_path || !file_exists($output_path)) {
+            return new \WP_REST_Response([
+                'success' => false,
+                'data' => ['message' => 'PDF processing failed. Could not generate output file.']
+            ], 500);
+        }
+
+        $upload_dir = wp_upload_dir();
+        $branded_dir = $upload_dir['basedir'] . '/hr48-branded/';
+        if (!is_dir($branded_dir)) {
+            wp_mkdir_p($branded_dir);
+        }
+
+        $out_name = 'branded-' . sanitize_file_name(pathinfo($file['name'], PATHINFO_FILENAME)) . '-' . time() . '.pdf';
+        $dest = $branded_dir . $out_name;
+        rename($output_path, $dest);
+        chmod($dest, 0644);
+
+        $url = $upload_dir['baseurl'] . '/hr48-branded/' . $out_name;
+
+        return new \WP_REST_Response([
+            'success' => true,
+            'data' => [
+                'url' => $url,
+                'filename' => $out_name,
+                'message' => 'PDF branded successfully.',
+            ]
+        ], 200);
     }
 
     private function get_submission_count() {
@@ -2691,7 +2773,6 @@ MD;
                 if (!fileInput.files.length) return;
 
                 var formData = new FormData(form);
-                formData.append('action', 'hr48_process_pdf_branding');
 
                 processBtn.disabled = true;
                 progress.style.display = 'block';
@@ -2701,7 +2782,8 @@ MD;
                 progressText.textContent = 'Uploading PDF...';
 
                 var xhr = new XMLHttpRequest();
-                xhr.open('POST', '<?php echo esc_js(admin_url('admin-ajax.php')); ?>', true);
+                xhr.open('POST', '<?php echo esc_js(rest_url('hr48-auto/v1/brand-pdf')); ?>', true);
+                xhr.setRequestHeader('X-WP-Nonce', '<?php echo esc_js(wp_create_nonce('wp_rest')); ?>');
 
                 xhr.upload.addEventListener('progress', function(ev) {
                     if (ev.lengthComputable) {
