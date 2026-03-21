@@ -2715,6 +2715,22 @@ MD;
                     if (xhr.readyState !== 4) return;
                     progressFill.style.width = '100%';
 
+                    if (xhr.status === 0) {
+                        progressText.textContent = 'Error occurred.';
+                        errorDiv.textContent = 'Network error - request was blocked or timed out. If the file is large, try a smaller PDF.';
+                        errorDiv.style.display = 'block';
+                        processBtn.disabled = false;
+                        return;
+                    }
+
+                    if (xhr.status !== 200) {
+                        progressText.textContent = 'Error occurred.';
+                        errorDiv.textContent = 'Server returned HTTP ' + xhr.status + '. The upload may have been blocked by a firewall or exceeded server limits.';
+                        errorDiv.style.display = 'block';
+                        processBtn.disabled = false;
+                        return;
+                    }
+
                     try {
                         var resp = JSON.parse(xhr.responseText);
                         if (resp.success && resp.data && resp.data.url) {
@@ -2724,12 +2740,14 @@ MD;
                             result.style.display = 'block';
                         } else {
                             progressText.textContent = 'Error occurred.';
-                            errorDiv.textContent = (resp.data && resp.data.message) ? resp.data.message : 'An unknown error occurred.';
+                            var msg = (resp.data && resp.data.message) ? resp.data.message : 'Processing failed (no details from server).';
+                            errorDiv.textContent = msg;
                             errorDiv.style.display = 'block';
                         }
                     } catch(ex) {
                         progressText.textContent = 'Error occurred.';
-                        errorDiv.textContent = 'Server returned an invalid response.';
+                        var preview = xhr.responseText ? xhr.responseText.substring(0, 200) : '(empty)';
+                        errorDiv.textContent = 'Server returned invalid response. Preview: ' + preview;
                         errorDiv.style.display = 'block';
                     }
                     processBtn.disabled = false;
@@ -2778,11 +2796,13 @@ MD;
 
         try {
             $output_path = $this->process_pdf_branding($file['tmp_name'], $tag_first, $tag_last);
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
+            error_log('48HR Branding Swap error: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine());
             wp_send_json_error(['message' => 'PDF processing failed: ' . $e->getMessage()]);
         }
 
         if (!$output_path || !file_exists($output_path)) {
+            error_log('48HR Branding Swap: output_path empty or missing. Path=' . ($output_path ?: 'null'));
             wp_send_json_error(['message' => 'PDF processing failed. Could not generate output file.']);
         }
 
@@ -2816,6 +2836,8 @@ MD;
      * @return string Path to processed PDF.
      */
     private function process_pdf_branding($source_path, $tag_first = true, $tag_last = true) {
+        @set_time_limit(300);
+
         $pdf = new \setasign\Fpdi\Fpdi();
 
         $page_count = $pdf->setSourceFile($source_path);
