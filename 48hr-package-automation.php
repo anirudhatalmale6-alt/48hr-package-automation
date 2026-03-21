@@ -2779,6 +2779,7 @@ MD;
                 if (!fileInput.files.length) return;
 
                 var formData = new FormData(form);
+                formData.append('action', 'hr48_process_pdf_branding');
 
                 processBtn.disabled = true;
                 progress.style.display = 'block';
@@ -2788,8 +2789,7 @@ MD;
                 progressText.textContent = 'Uploading PDF...';
 
                 var xhr = new XMLHttpRequest();
-                xhr.open('POST', '<?php echo esc_js(rest_url('hr48-auto/v1/brand-pdf')); ?>', true);
-                xhr.setRequestHeader('X-WP-Nonce', '<?php echo esc_js(wp_create_nonce('wp_rest')); ?>');
+                xhr.open('POST', '<?php echo esc_js(admin_url('admin-ajax.php')); ?>', true);
 
                 xhr.upload.addEventListener('progress', function(ev) {
                     if (ev.lengthComputable) {
@@ -2819,8 +2819,17 @@ MD;
                         return;
                     }
 
+                    var raw = xhr.responseText.trim();
+                    if (raw === '0' || raw === '-1') {
+                        progressText.textContent = 'Error occurred.';
+                        errorDiv.textContent = 'Session expired. Please refresh the page and try again.';
+                        errorDiv.style.display = 'block';
+                        processBtn.disabled = false;
+                        return;
+                    }
+
                     try {
-                        var resp = JSON.parse(xhr.responseText);
+                        var resp = JSON.parse(raw);
                         if (resp.success && resp.data && resp.data.url) {
                             progressText.textContent = 'Done!';
                             downloadLink.href = resp.data.url;
@@ -2834,7 +2843,7 @@ MD;
                         }
                     } catch(ex) {
                         progressText.textContent = 'Error occurred.';
-                        var preview = xhr.responseText ? xhr.responseText.substring(0, 200) : '(empty)';
+                        var preview = raw ? raw.substring(0, 200) : '(empty)';
                         errorDiv.textContent = 'Server returned invalid response. Preview: ' + preview;
                         errorDiv.style.display = 'block';
                     }
