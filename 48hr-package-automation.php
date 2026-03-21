@@ -2838,6 +2838,31 @@ MD;
     private function process_pdf_branding($source_path, $tag_first = true, $tag_last = true) {
         @set_time_limit(300);
 
+        // Pre-convert PDF with Ghostscript for full compatibility (handles PDF 1.5+, complex objects)
+        $gs_converted = null;
+        $gs_path = trim(shell_exec('which gs 2>/dev/null') ?: '');
+        if ($gs_path && is_executable($gs_path)) {
+            $gs_converted = tempnam(sys_get_temp_dir(), 'hr48_gs_');
+            $cmd = sprintf(
+                '%s -sDEVICE=pdfwrite -dCompatibilityLevel=1.4 -dNOPAUSE -dBATCH -dQUIET '
+                . '-dPrinted=false -dPDFSETTINGS=/prepress '
+                . '-dColorImageDownsampleType=/Bicubic -dColorImageResolution=300 '
+                . '-dGrayImageDownsampleType=/Bicubic -dGrayImageResolution=300 '
+                . '-sOutputFile=%s %s 2>&1',
+                escapeshellarg($gs_path),
+                escapeshellarg($gs_converted),
+                escapeshellarg($source_path)
+            );
+            $gs_output = shell_exec($cmd);
+            if (file_exists($gs_converted) && filesize($gs_converted) > 0) {
+                $source_path = $gs_converted;
+            } else {
+                error_log('48HR Branding: GS conversion failed: ' . ($gs_output ?: 'empty output'));
+                @unlink($gs_converted);
+                $gs_converted = null;
+            }
+        }
+
         $pdf = new \setasign\Fpdi\Fpdi();
 
         $page_count = $pdf->setSourceFile($source_path);
@@ -2911,6 +2936,11 @@ MD;
         // Save to temp file
         $tmp = tempnam(sys_get_temp_dir(), 'hr48_branded_');
         $pdf->Output('F', $tmp);
+
+        // Clean up GS temp file if it was created
+        if ($gs_converted) {
+            @unlink($gs_converted);
+        }
 
         return $tmp;
     }
