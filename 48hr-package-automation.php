@@ -2779,7 +2779,7 @@ MD;
                 if (!fileInput.files.length) return;
 
                 var formData = new FormData(form);
-                formData.append('action', 'hr48_process_pdf_branding');
+                formData.append('_nonce', '<?php echo esc_js(wp_create_nonce('hr48_brand_upload')); ?>');
 
                 processBtn.disabled = true;
                 progress.style.display = 'block';
@@ -2789,7 +2789,7 @@ MD;
                 progressText.textContent = 'Uploading PDF...';
 
                 var xhr = new XMLHttpRequest();
-                xhr.open('POST', '<?php echo esc_js(admin_url('admin-ajax.php')); ?>', true);
+                xhr.open('POST', '<?php echo esc_js(plugins_url('brand-upload.php', __FILE__)); ?>', true);
 
                 xhr.upload.addEventListener('progress', function(ev) {
                     if (ev.lengthComputable) {
