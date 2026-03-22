@@ -2,6 +2,7 @@
 /**
  * Standalone PDF branding upload handler.
  * Bypasses admin-ajax.php and REST API to avoid Cloudflare WAF blocks.
+ * Calls Ghostscript directly for PDF processing.
  */
 
 // Load WordPress
@@ -16,6 +17,7 @@ require_once $wp_load;
 
 // Set JSON header
 header('Content-Type: application/json; charset=utf-8');
+header('Cache-Control: no-cache, no-store');
 
 // Check authentication
 if (!is_user_logged_in() || !current_user_can('manage_options')) {
@@ -41,7 +43,7 @@ if (empty($_FILES['pdf_file']) || $_FILES['pdf_file']['error'] !== UPLOAD_ERR_OK
 
 $file = $_FILES['pdf_file'];
 
-// Validate
+// Validate extension
 $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
 if ($ext !== 'pdf') {
     http_response_code(400);
@@ -49,16 +51,10 @@ if ($ext !== 'pdf') {
     exit;
 }
 
+// Validate size
 if ($file['size'] > 50 * 1024 * 1024) {
     http_response_code(400);
     echo json_encode(['success' => false, 'data' => ['message' => 'File exceeds 50 MB limit.']]);
-    exit;
-}
-
-// Ensure plugin class is loaded
-if (!class_exists('HR48_Package_Automation')) {
-    http_response_code(500);
-    echo json_encode(['success' => false, 'data' => ['message' => 'Plugin not active.']]);
     exit;
 }
 
@@ -66,24 +62,99 @@ $add_branding = !empty($_POST['add_branding']);
 $tag_first = !empty($_POST['tag_first_page']);
 $tag_last = !empty($_POST['tag_last_page']);
 
-// Process using the plugin's method via reflection (since it's private)
-$plugin = new HR48_Package_Automation();
-$method = new ReflectionMethod($plugin, 'process_pdf_branding');
-$method->setAccessible(true);
-
-try {
-    @set_time_limit(300);
-    $output_path = $method->invoke($plugin, $file['tmp_name'], $tag_first, $tag_last, $add_branding);
-} catch (Throwable $e) {
-    error_log('48HR brand-upload error: ' . $e->getMessage());
+// Find Ghostscript
+$gs_path = trim(shell_exec('which gs 2>/dev/null') ?: '');
+if (!$gs_path || !is_executable($gs_path)) {
     http_response_code(500);
-    echo json_encode(['success' => false, 'data' => ['message' => 'Processing failed: ' . $e->getMessage()]]);
+    echo json_encode(['success' => false, 'data' => ['message' => 'Ghostscript not available on server.']]);
     exit;
 }
 
-if (!$output_path || !file_exists($output_path)) {
+@set_time_limit(300);
+$source = $file['tmp_name'];
+$output = tempnam(sys_get_temp_dir(), 'hr48_branded_');
+
+// Get page count
+$count_cmd = sprintf(
+    '%s -q -dNODISPLAY -dNOSAFER -c "(%s) (r) file runpdfbegin pdfpagecount = quit" 2>&1',
+    escapeshellarg($gs_path),
+    str_replace(['(', ')'], ['\\(', '\\)'], $source)
+);
+$page_count = (int) trim(shell_exec($count_cmd));
+
+// Build PostScript EndPage procedure
+$ps_code = '';
+
+if (($tag_first || $tag_last) && $add_branding) {
+    $ps_code .= sprintf('/hr48page 0 def /hr48total %d def ', $page_count);
+}
+
+$ps_code .= '<< /EndPage { '
+    . 'exch pop dup 0 eq { '
+    . 'pop gsave '
+    . 'currentpagedevice /PageSize get aload pop '
+    . '/pH exch def /pW exch def '
+    // Always cover NotebookLM watermark
+    . '0.941 0.925 0.890 setrgbcolor '
+    . 'pW 164 sub 8 156 34 rectfill ';
+
+if ($add_branding) {
+    $ps_code .= '/Helvetica findfont 9 scalefont setfont '
+        . '(Powered by ) stringwidth pop '
+        . '(48HoursReady) stringwidth pop add '
+        . '(.com) stringwidth pop add '
+        . '/tw exch def '
+        . 'pW tw sub 2 div 28 moveto '
+        . '0.176 0.176 0.176 setrgbcolor '
+        . '(Powered by ) show '
+        . '0.722 0.592 0.353 setrgbcolor '
+        . '(48HoursReady) show '
+        . '0.176 0.176 0.176 setrgbcolor '
+        . '(.com) show ';
+
+    if ($tag_first || $tag_last) {
+        $ps_code .= '/hr48page hr48page 1 add def ';
+        $conditions = [];
+        if ($tag_first) $conditions[] = 'hr48page 1 eq';
+        if ($tag_last) $conditions[] = 'hr48page hr48total eq';
+        $condition = implode(' ', $conditions);
+        if (count($conditions) > 1) $condition .= ' or';
+
+        $ps_code .= $condition . ' { '
+            . '/Helvetica-Oblique findfont 7 scalefont setfont '
+            . '0.722 0.592 0.353 setrgbcolor '
+            . '(Pitch Deck Ready. GPT Verified.) dup stringwidth pop '
+            . '/tagw exch def '
+            . 'pW tagw sub 2 div 16 moveto show '
+            . '} if ';
+    }
+}
+
+$ps_code .= 'grestore true '
+    . '} { '
+    . '2 ne '
+    . '} ifelse '
+    . '} >> setpagedevice';
+
+$cmd = sprintf(
+    '%s -sDEVICE=pdfwrite -dCompatibilityLevel=1.4 -dNOPAUSE -dBATCH -dQUIET '
+    . '-dPDFSETTINGS=/prepress '
+    . '-dColorImageDownsampleType=/Bicubic -dColorImageResolution=300 '
+    . '-dGrayImageDownsampleType=/Bicubic -dGrayImageResolution=300 '
+    . '-sOutputFile=%s -c %s -f %s 2>&1',
+    escapeshellarg($gs_path),
+    escapeshellarg($output),
+    escapeshellarg($ps_code),
+    escapeshellarg($source)
+);
+
+$gs_output = shell_exec($cmd);
+
+if (!file_exists($output) || filesize($output) === 0) {
+    error_log('48HR brand-upload GS failed: ' . ($gs_output ?: 'empty'));
+    @unlink($output);
     http_response_code(500);
-    echo json_encode(['success' => false, 'data' => ['message' => 'Processing failed. No output file generated.']]);
+    echo json_encode(['success' => false, 'data' => ['message' => 'PDF processing failed. GS output: ' . substr($gs_output ?: 'none', 0, 200)]]);
     exit;
 }
 
@@ -96,7 +167,7 @@ if (!is_dir($branded_dir)) {
 
 $out_name = 'branded-' . sanitize_file_name(pathinfo($file['name'], PATHINFO_FILENAME)) . '-' . time() . '.pdf';
 $dest = $branded_dir . $out_name;
-rename($output_path, $dest);
+rename($output, $dest);
 chmod($dest, 0644);
 
 $url = $upload_dir['baseurl'] . '/hr48-branded/' . $out_name;
