@@ -2805,29 +2805,15 @@ MD;
 
                     if (xhr.status === 0) {
                         progressText.textContent = 'Error occurred.';
-                        errorDiv.textContent = 'Network error - request was blocked or timed out. If the file is large, try a smaller PDF.';
-                        errorDiv.style.display = 'block';
-                        processBtn.disabled = false;
-                        return;
-                    }
-
-                    if (xhr.status !== 200) {
-                        progressText.textContent = 'Error occurred.';
-                        errorDiv.textContent = 'Server returned HTTP ' + xhr.status + '. The upload may have been blocked by a firewall or exceeded server limits.';
+                        errorDiv.textContent = 'Network error - request was blocked or timed out.';
                         errorDiv.style.display = 'block';
                         processBtn.disabled = false;
                         return;
                     }
 
                     var raw = xhr.responseText.trim();
-                    if (raw === '0' || raw === '-1') {
-                        progressText.textContent = 'Error occurred.';
-                        errorDiv.textContent = 'Session expired. Please refresh the page and try again.';
-                        errorDiv.style.display = 'block';
-                        processBtn.disabled = false;
-                        return;
-                    }
 
+                    // Try to parse JSON first (handler returns JSON even on errors)
                     try {
                         var resp = JSON.parse(raw);
                         if (resp.success && resp.data && resp.data.url) {
@@ -2837,7 +2823,7 @@ MD;
                             result.style.display = 'block';
                         } else {
                             progressText.textContent = 'Error occurred.';
-                            var msg = (resp.data && resp.data.message) ? resp.data.message : 'Processing failed (no details from server).';
+                            var msg = (resp.data && resp.data.message) ? resp.data.message : 'HTTP ' + xhr.status + ' error.';
                             errorDiv.textContent = msg;
                             errorDiv.style.display = 'block';
                         }
