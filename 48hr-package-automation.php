@@ -2182,6 +2182,15 @@ MD;
 
         add_submenu_page(
             'hr48-submissions',
+            'Video Branding',
+            'Video Branding',
+            'manage_options',
+            'hr48-video-branding',
+            [$this, 'render_video_branding_page']
+        );
+
+        add_submenu_page(
+            'hr48-submissions',
             'Content Generator',
             'Content Generator',
             'manage_options',
@@ -2838,6 +2847,210 @@ MD;
 
                 progressFill.style.width = '10%';
                 progressText.textContent = 'Processing PDF pages...';
+                xhr.send(formData);
+            });
+        })();
+        </script>
+        <?php
+    }
+
+    public function render_video_branding_page() {
+        ?>
+        <div class="hr48-wrap">
+            <h1>Video Branding Swap</h1>
+            <p class="hr48-subtitle">Upload a NotebookLM-generated video to remove their branding and add 48HoursReady branding.</p>
+
+            <div class="hr48-card">
+                <h2>Upload Video</h2>
+                <p class="hr48-card-desc">Drag and drop or click to select a NotebookLM video. The tool will replace the NotebookLM watermark with 48HoursReady branding.</p>
+
+                <form id="hr48-video-form" enctype="multipart/form-data">
+
+                    <div id="hr48v-upload-zone" class="hr48-upload-zone">
+                        <div class="upload-icon">&#127909;</div>
+                        <p><strong>Drop your video here</strong> or click to browse</p>
+                        <p class="upload-hint">Supports MP4, MOV, WebM, MKV, AVI &mdash; up to 100 MB</p>
+                        <input type="file" id="hr48v-file" name="video_file" accept="video/*" style="display:none;" />
+                    </div>
+
+                    <div id="hr48v-file-info" class="hr48-file-info">
+                        <span class="remove-file" id="hr48v-remove-file">&times; Remove</span>
+                        <span class="filename" id="hr48v-filename"></span>
+                        <span id="hr48v-filesize" style="color:#888;margin-left:8px;"></span>
+                    </div>
+
+                    <div class="hr48-checkbox-row">
+                        <label>
+                            <input type="checkbox" name="add_branding" value="1" checked id="hr48v-add-branding" />
+                            Add "Powered by 48HoursReady.com" branding
+                        </label>
+                    </div>
+                    <p style="font-size:12px;color:#888;margin-top:4px;">Uncheck to only remove the NotebookLM watermark without adding 48HR branding.</p>
+
+                    <button type="submit" class="hr48-btn" id="hr48v-process-btn" disabled>
+                        &#9654; Process Video
+                    </button>
+                </form>
+
+                <div id="hr48v-progress" class="hr48-progress">
+                    <div class="hr48-progress-bar">
+                        <div class="hr48-progress-fill" id="hr48v-progress-fill"></div>
+                    </div>
+                    <div class="hr48-progress-text" id="hr48v-progress-text">Processing...</div>
+                </div>
+
+                <div id="hr48v-result" class="hr48-result">
+                    <div class="result-title">Video processed successfully!</div>
+                    <a id="hr48v-download-link" href="#" target="_blank">&#11015; Download Branded Video</a>
+                </div>
+
+                <div id="hr48v-error" class="hr48-error"></div>
+            </div>
+
+            <div class="hr48-card">
+                <h2>How It Works</h2>
+                <p class="hr48-card-desc">The video branding swap performs the following operations:</p>
+                <ol style="margin-left:20px;color:#555;line-height:2;">
+                    <li>Detects the video dimensions and NotebookLM watermark position (bottom-right corner)</li>
+                    <li>Draws a white rectangle over the NotebookLM watermark area</li>
+                    <li>If branding is enabled: <strong>"Powered by <span style="color:#B8975A;">48HoursReady</span>.com"</strong> is added centered at the bottom</li>
+                    <li>Re-encodes the video in H.264 with high quality (CRF 18) preserving the original audio</li>
+                </ol>
+            </div>
+        </div>
+
+        <script>
+        (function(){
+            var zone = document.getElementById('hr48v-upload-zone');
+            var fileInput = document.getElementById('hr48v-file');
+            var fileInfo = document.getElementById('hr48v-file-info');
+            var fileName = document.getElementById('hr48v-filename');
+            var fileSize = document.getElementById('hr48v-filesize');
+            var removeBtn = document.getElementById('hr48v-remove-file');
+            var processBtn = document.getElementById('hr48v-process-btn');
+            var form = document.getElementById('hr48-video-form');
+            var progress = document.getElementById('hr48v-progress');
+            var progressFill = document.getElementById('hr48v-progress-fill');
+            var progressText = document.getElementById('hr48v-progress-text');
+            var result = document.getElementById('hr48v-result');
+            var downloadLink = document.getElementById('hr48v-download-link');
+            var errorDiv = document.getElementById('hr48v-error');
+
+            function formatSize(bytes) {
+                if (bytes < 1024) return bytes + ' B';
+                if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+                return (bytes / 1048576).toFixed(1) + ' MB';
+            }
+
+            function showFile(file) {
+                if (!file || !file.type.match(/^video\//)) {
+                    alert('Please select a video file.');
+                    return;
+                }
+                fileName.textContent = file.name;
+                fileSize.textContent = '(' + formatSize(file.size) + ')';
+                fileInfo.style.display = 'block';
+                zone.style.display = 'none';
+                processBtn.disabled = false;
+                result.style.display = 'none';
+                errorDiv.style.display = 'none';
+            }
+
+            zone.addEventListener('click', function() { fileInput.click(); });
+            fileInput.addEventListener('change', function() {
+                if (this.files.length) showFile(this.files[0]);
+            });
+
+            zone.addEventListener('dragover', function(e) {
+                e.preventDefault();
+                zone.classList.add('dragover');
+            });
+            zone.addEventListener('dragleave', function() {
+                zone.classList.remove('dragover');
+            });
+            zone.addEventListener('drop', function(e) {
+                e.preventDefault();
+                zone.classList.remove('dragover');
+                if (e.dataTransfer.files.length) {
+                    fileInput.files = e.dataTransfer.files;
+                    showFile(e.dataTransfer.files[0]);
+                }
+            });
+
+            removeBtn.addEventListener('click', function() {
+                fileInput.value = '';
+                fileInfo.style.display = 'none';
+                zone.style.display = 'block';
+                processBtn.disabled = true;
+            });
+
+            form.addEventListener('submit', function(e) {
+                e.preventDefault();
+                if (!fileInput.files.length) return;
+
+                var formData = new FormData(form);
+
+                processBtn.disabled = true;
+                progress.style.display = 'block';
+                result.style.display = 'none';
+                errorDiv.style.display = 'none';
+                progressFill.style.width = '5%';
+                progressText.textContent = 'Uploading video...';
+
+                var xhr = new XMLHttpRequest();
+                xhr.open('POST', '<?php echo esc_js(plugins_url('video-brand-upload.php', __FILE__)); ?>', true);
+                xhr.timeout = 600000; // 10 minute timeout for large videos
+
+                xhr.upload.addEventListener('progress', function(ev) {
+                    if (ev.lengthComputable) {
+                        var pct = Math.round((ev.loaded / ev.total) * 40);
+                        progressFill.style.width = pct + '%';
+                        progressText.textContent = 'Uploading... ' + Math.round(ev.loaded / ev.total * 100) + '%';
+                    }
+                });
+
+                xhr.onreadystatechange = function() {
+                    if (xhr.readyState === 3) {
+                        progressFill.style.width = '60%';
+                        progressText.textContent = 'Encoding video... this may take a minute or two';
+                    }
+                    if (xhr.readyState !== 4) return;
+                    progressFill.style.width = '100%';
+
+                    if (xhr.status === 0) {
+                        progressText.textContent = 'Error occurred.';
+                        errorDiv.textContent = 'Network error - request was blocked or timed out. Try again or use a smaller video.';
+                        errorDiv.style.display = 'block';
+                        processBtn.disabled = false;
+                        return;
+                    }
+
+                    var raw = xhr.responseText.trim();
+
+                    try {
+                        var resp = JSON.parse(raw);
+                        if (resp.success && resp.data && resp.data.url) {
+                            progressText.textContent = 'Done!';
+                            downloadLink.href = resp.data.url;
+                            downloadLink.download = resp.data.filename || 'branded.mp4';
+                            result.style.display = 'block';
+                        } else {
+                            progressText.textContent = 'Error occurred.';
+                            var msg = (resp.data && resp.data.message) ? resp.data.message : 'HTTP ' + xhr.status + ' error.';
+                            errorDiv.textContent = msg;
+                            errorDiv.style.display = 'block';
+                        }
+                    } catch(ex) {
+                        progressText.textContent = 'Error occurred.';
+                        var preview = raw ? raw.substring(0, 200) : '(empty)';
+                        errorDiv.textContent = 'Server returned invalid response. Preview: ' + preview;
+                        errorDiv.style.display = 'block';
+                    }
+                    processBtn.disabled = false;
+                };
+
+                progressFill.style.width = '10%';
+                progressText.textContent = 'Uploading video... please wait';
                 xhr.send(formData);
             });
         })();
