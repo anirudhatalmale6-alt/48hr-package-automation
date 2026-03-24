@@ -123,26 +123,26 @@ if ($ffprobe_path && is_executable($ffprobe_path)) {
     }
 }
 
-// Build ffmpeg video filter
+// Build ffmpeg command
 // NotebookLM watermark is at bottom-right corner
-// Cover it with a white rectangle, then add branding text at bottom center
 $watermark_box_w = (int) round($width * 0.19);  // ~19% of width
 $watermark_box_h = (int) round($height * 0.083); // ~8.3% of height
 $watermark_box_x = $width - $watermark_box_w;
 $watermark_box_y = $height - $watermark_box_h;
 
-$vf_parts = [];
-
-// Always cover NotebookLM watermark with white box
-$vf_parts[] = sprintf(
+// Always cover NotebookLM watermark with white drawbox
+$drawbox = sprintf(
     'drawbox=x=%d:y=%d:w=%d:h=%d:color=white:t=fill',
     $watermark_box_x, $watermark_box_y, $watermark_box_w, $watermark_box_h
 );
 
-// Add branding text if enabled
+$branding_img = '';
 if ($add_branding) {
+    // Create branding text as a transparent PNG using PHP GD, then overlay it
     $font_size = max(14, (int) round($height * 0.022));
-    // Try to find a good font
+    $text = 'Powered by 48HoursReady.com';
+
+    // Try to find a TTF font for GD
     $font_paths = [
         '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
         '/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf',
@@ -156,27 +156,69 @@ if ($add_branding) {
         }
     }
 
-    $font_opt = $font ? ':fontfile=' . $font : '';
-    $vf_parts[] = sprintf(
-        "drawtext=text='Powered by 48HoursReady.com':fontsize=%d:fontcolor=0x2D2D2D:x=(w-text_w)/2:y=h-%d%s",
-        $font_size,
-        (int) round($height * 0.039),
-        $font_opt
+    // Create branding image
+    $branding_img = tempnam(sys_get_temp_dir(), 'hr48_brand_') . '.png';
+    $img_w = $width;
+    $img_h = (int) round($height * 0.06);
+    $img = imagecreatetruecolor($img_w, $img_h);
+    imagesavealpha($img, true);
+    $transparent = imagecolorallocatealpha($img, 0, 0, 0, 127);
+    imagefill($img, 0, 0, $transparent);
+    $text_color = imagecolorallocate($img, 45, 45, 45);
+
+    if ($font && function_exists('imagettftext')) {
+        // Use TTF font
+        $bbox = imagettfbbox($font_size, 0, $font, $text);
+        $tw = $bbox[2] - $bbox[0];
+        $th = $bbox[1] - $bbox[7];
+        $tx = ($img_w - $tw) / 2;
+        $ty = ($img_h + $th) / 2;
+        imagettftext($img, $font_size, 0, (int)$tx, (int)$ty, $text_color, $font, $text);
+    } else {
+        // Fallback: use built-in GD font
+        $gd_font = 4; // medium built-in font
+        $tw = imagefontwidth($gd_font) * strlen($text);
+        $th = imagefontheight($gd_font);
+        $tx = ($img_w - $tw) / 2;
+        $ty = ($img_h - $th) / 2;
+        imagestring($img, $gd_font, (int)$tx, (int)$ty, $text, $text_color);
+    }
+
+    imagepng($img, $branding_img);
+    imagedestroy($img);
+}
+
+// Build ffmpeg command
+if ($add_branding && $branding_img && file_exists($branding_img)) {
+    // Use overlay filter: drawbox to cover watermark, then overlay branding PNG at bottom
+    $overlay_y = $height - (int) round($height * 0.06);
+    $cmd = sprintf(
+        '%s -i %s -i %s -filter_complex "[0:v]%s[boxed];[boxed][1:v]overlay=0:%d[out]" -map "[out]" -map 0:a? -c:v libx264 -crf 18 -preset medium -c:a copy -y %s 2>&1',
+        escapeshellarg($ffmpeg_path),
+        escapeshellarg($source),
+        escapeshellarg($branding_img),
+        $drawbox,
+        $overlay_y,
+        escapeshellarg($output)
+    );
+} else {
+    // Just drawbox to cover watermark, no branding text
+    $cmd = sprintf(
+        '%s -i %s -vf %s -c:v libx264 -crf 18 -preset medium -c:a copy -y %s 2>&1',
+        escapeshellarg($ffmpeg_path),
+        escapeshellarg($source),
+        escapeshellarg($drawbox),
+        escapeshellarg($output)
     );
 }
 
-$vf = implode(',', $vf_parts);
-
-$cmd = sprintf(
-    '%s -i %s -vf %s -c:v libx264 -crf 18 -preset medium -c:a copy -y %s 2>&1',
-    escapeshellarg($ffmpeg_path),
-    escapeshellarg($source),
-    escapeshellarg($vf),
-    escapeshellarg($output)
-);
-
 error_log('48HR video-brand cmd: ' . $cmd);
 $ffmpeg_output = shell_exec($cmd);
+
+// Clean up temp branding image
+if ($branding_img && file_exists($branding_img)) {
+    @unlink($branding_img);
+}
 
 if (!file_exists($output) || filesize($output) === 0) {
     error_log('48HR video-brand ffmpeg failed: ' . ($ffmpeg_output ?: 'empty'));
