@@ -5,6 +5,12 @@
  * Uses ffmpeg to remove NotebookLM watermark and add 48HoursReady branding.
  */
 
+// Increase limits for video uploads
+@ini_set('upload_max_filesize', '100M');
+@ini_set('post_max_size', '110M');
+@ini_set('max_execution_time', '600');
+@ini_set('memory_limit', '512M');
+
 // Load WordPress
 $wp_load = dirname(__FILE__) . '/../../../wp-load.php';
 if (!file_exists($wp_load)) {
