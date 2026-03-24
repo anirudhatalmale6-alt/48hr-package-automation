@@ -55,9 +55,36 @@ if ($file['size'] > 100 * 1024 * 1024) {
 
 $add_branding = !empty($_POST['add_branding']);
 
-// Find ffmpeg and ffprobe
-$ffmpeg_path = trim(shell_exec('which ffmpeg 2>/dev/null') ?: '');
-$ffprobe_path = trim(shell_exec('which ffprobe 2>/dev/null') ?: '');
+// Find ffmpeg and ffprobe - check local bin first, then system
+$plugin_dir = dirname(__FILE__);
+$ffmpeg_path = '';
+$ffprobe_path = '';
+
+// Check for bundled static binary
+if (is_file($plugin_dir . '/bin/ffmpeg') && is_executable($plugin_dir . '/bin/ffmpeg')) {
+    $ffmpeg_path = $plugin_dir . '/bin/ffmpeg';
+} else if (is_file($plugin_dir . '/bin/ffmpeg')) {
+    // Try to make executable
+    @chmod($plugin_dir . '/bin/ffmpeg', 0755);
+    if (is_executable($plugin_dir . '/bin/ffmpeg')) {
+        $ffmpeg_path = $plugin_dir . '/bin/ffmpeg';
+    }
+}
+if (!$ffmpeg_path) {
+    $ffmpeg_path = trim(shell_exec('which ffmpeg 2>/dev/null') ?: '');
+}
+
+if (is_file($plugin_dir . '/bin/ffprobe') && is_executable($plugin_dir . '/bin/ffprobe')) {
+    $ffprobe_path = $plugin_dir . '/bin/ffprobe';
+} else if (is_file($plugin_dir . '/bin/ffprobe')) {
+    @chmod($plugin_dir . '/bin/ffprobe', 0755);
+    if (is_executable($plugin_dir . '/bin/ffprobe')) {
+        $ffprobe_path = $plugin_dir . '/bin/ffprobe';
+    }
+}
+if (!$ffprobe_path) {
+    $ffprobe_path = trim(shell_exec('which ffprobe 2>/dev/null') ?: '');
+}
 if (!$ffmpeg_path || !is_executable($ffmpeg_path)) {
     http_response_code(500);
     echo json_encode(['success' => false, 'data' => ['message' => 'ffmpeg not available on server.']]);
